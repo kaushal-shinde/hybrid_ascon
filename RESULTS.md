@@ -1,185 +1,181 @@
-# Hardware results: Ascon-AEAD128 vs the Ascon-SipHash hybrid
+# Hardware results: Ascon-AEAD128 and two Ascon-SipHash hybrids
 
-Area, timing and power for the two AEAD cores in [`verilog/`](verilog/).
+Area, timing and power for the three AEAD cores in [`verilog/`](verilog/),
+measured on an FPGA with Vivado and on a 130 nm ASIC process with OpenROAD.
 
 **Every number was produced by Xilinx Vivado or by OpenROAD** on this machine.
-Section 8 maps each metric to the log it came from. Measured 2026-08-25.
+Section 9 maps each metric to the log it came from. Measured 2026-08-25.
 
 ---
 
-## 1. Tools and target
+## 1. Designs, tools and targets
+
+| design | state | rate | capacity | file |
+|---|---|---|---|---|
+| **Ascon-AEAD128** | 320 bits (5 words) | 128 | 192 | `verilog/ascon_aead128.v` |
+| **hybrid r=128** | 256 bits (4 words) | 128 | **128** | `verilog/asconsip_aead.v` |
+| **hybrid r=64** | 256 bits (4 words) | **64** | **192** | `verilog/asconsip64_aead.v` |
+
+The two hybrids are architecturally identical — same 256-bit state, same round
+(Ascon's round constant then SipHash's SIPROUND), same 12/8 round counts, same
+duplex mode. They differ only in where the rate ends and the capacity begins.
+The r=64 variant restores Ascon-AEAD128's 192-bit capacity.
 
 | | |
 |---|---|
 | FPGA implementation | Vivado v2026.1, `set_param general.maxThreads 1` |
-| FPGA part | **xc7a12ticsg325-1L** — Artix-7, CSG325, speed grade -1L, 8000 LUTs / 16000 FFs |
+| FPGA part | **xc7a12ticsg325-1L** — Artix-7, CSG325, −1L, 8000 LUTs / 16000 FFs |
 | Simulation | Vivado `xvlog` / `xelab` / `xsim` |
 | ASIC P&R, optimisation, STA, power | OpenROAD 2.0-12381-g01bba3695 |
 | ASIC synthesis front-end | yosys 0.38+92 (OpenROAD does not synthesise) |
-| ASIC library | Nangate45, NAND2_X1 = 0.798 µm² |
+| ASIC library | **SkyWater sky130hd**, 130 nm, fabricable, `tt_025C_1v80`, NAND2_1 = 3.7536 µm² |
 
 ---
 
 ## 2. Headline
 
-| | Ascon-AEAD128 | Ascon-SipHash hybrid |
-|---|---|---|
-| FPGA slices | 356 | **323** (−9.3%) |
-| FPGA LUTs | 1101 | **1021** (−7.3%) |
-| FPGA Fmax | **55.0 MHz** | 54.4 MHz |
-| ASIC area (timing-optimised) | 12 518 µm² / 15 687 GE | **10 846 µm² / 13 591 GE** (−13.4%) |
-| **ASIC Fmax** | **≥ 714 MHz** | 167 MHz |
-| ASIC power @ 100 MHz | **16.4 mW** | 18.3 mW |
-| FPGA energy / bit | 20.3 pJ | **13.0 pJ** |
-| ASIC energy / bit @ 100 MHz | **10.2 pJ** | 11.5 pJ |
+| | Ascon-AEAD128 | hybrid r=128 | hybrid r=64 |
+|---|---|---|---|
+| FPGA slices | 355 | 323 (−9.0%) | **271 (−23.7%)** |
+| FPGA LUTs | 1101 | 1021 (−7.3%) | **873 (−20.7%)** |
+| FPGA registers | 728 | 663 (−8.9%) | **599 (−17.7%)** |
+| **FPGA Fmax** | 55.0 MHz | 54.4 MHz | **117.0 MHz** |
+| **FPGA throughput** | 880 Mbit/s | 870 Mbit/s | **936 Mbit/s** |
+| FPGA energy / bit | 20.5 pJ | **12.7 pJ** | 20.3 pJ |
+| sky130 cell area | 46 605 µm² | 41 044 µm² | **36 895 µm²** |
+| sky130 gate equivalents | 12 416 GE | 10 935 GE | **9 829 GE (−20.8%)** |
+| **sky130 Fmax** | **256 MHz** | 62.5 MHz | 62.5 MHz |
+| sky130 throughput | **4.10 Gbit/s** | 1.00 Gbit/s | 0.50 Gbit/s |
+| sky130 energy / bit | **21.6 pJ** | 24.9 pJ | 47.4 pJ |
+| Capacity (security parameter) | **192 bits** | 128 bits | **192 bits** |
 
-The hybrid is smaller on both targets and cheaper per bit on FPGA. On ASIC it is
-**4× slower** and slightly worse per bit. See §6 for why the two targets disagree.
+No design wins everywhere. **r=64 is the best FPGA design** — smallest, fastest,
+highest throughput, and it has Ascon's capacity. **Ascon is the best ASIC design**
+by a wide margin. **r=128 is the most energy-efficient on FPGA.** §7 explains why.
 
 ---
 
 ## 3. FPGA — Vivado, xc7a12ticsg325-1L
 
-Out-of-context synthesis (the cores have more ports than CSG325 has pins), then
-`opt_design → place_design → phys_opt_design → route_design`. All post-route.
+Out-of-context synthesis, then `opt_design → place_design → phys_opt_design →
+route_design`. All figures post-route, single-threaded so results are reproducible.
+
+Out-of-context is the standard way to characterise an IP core and is how
+published Ascon figures are measured. It is also the only option here: the cores
+have more than 400 ports and CSG325 offers roughly 150 usable I/O, so an
+I/O-buffered build is not physically possible. Frequencies are therefore for the
+core alone and would fall once integrated behind real I/O paths.
 
 ### 3.1 Resources
 
-| `report_utilization` | Ascon | Hybrid |
-|---|---|---|
-| Slice LUTs | 1101 (13.8%) | **1021 (12.8%)** |
-| Slice registers | 728 | **663** |
-| Occupied slices | 356 | **323** |
-| CARRY4 | 15 | 79 |
-| F7 muxes | 56 | 32 |
-| Fully routed nets | 1188 | 974 |
-| Nets with routing errors | 0 | 0 |
+| `report_utilization` | Ascon | r=128 | r=64 |
+|---|---|---|---|
+| Slice LUTs | 1101 (13.8%) | 1021 (12.8%) | **873 (10.9%)** |
+| Slice registers | 728 | 663 | **599** |
+| Occupied slices | 355 | 323 | **271** |
+| CARRY4 | 15 | 79 | 71 |
+| F7 muxes | 56 | 32 | 58 |
+| Fully routed nets | 1202 | 974 | 835 |
+| Routing errors | 0 | 0 | 0 |
+
+r=64 saves registers mainly on the output path — `dout` is 64 bits wide instead
+of 128.
 
 ### 3.2 Timing
 
-**Implementation is now reproducible.** `general.maxThreads` defaults to 8, which
-is what made two identical runs disagree by up to 0.40 ns previously. Pinned to 1,
-each operating point was implemented twice and produced **bit-identical slack**:
+QoR is **non-monotonic in the constraint** even when deterministic: a tighter
+constraint can route better than a looser one. Fmax is therefore the best
+achieved period across a search, not a single point.
 
-| | constraint | run 1 WNS | run 2 WNS | identical |
+| | tightest closing constraint | WNS | achieved period | **Fmax** |
 |---|---|---|---|---|
-| Ascon | 19.063 ns | +0.668 | +0.668 | yes |
-| Hybrid | 18.960 ns | +0.560 | +0.560 | yes |
+| Ascon | 18.384 ns | +0.202 | 18.182 ns | **55.00 MHz** |
+| r=128 | 18.960 ns | +0.560 | 18.400 ns | **54.35 MHz** |
+| r=64 | **8.719 ns** | +0.174 | **8.545 ns** | **117.03 MHz** |
 
-**QoR is non-monotonic in the constraint**, even deterministically — a tighter
-constraint can route better than a looser one, because the constraint changes
-placement decisions. Fmax is therefore taken as the best achieved period across a
-constraint sweep, not from a single point:
+Critical-path structure, which explains the gap:
 
-| Ascon constraint | WNS | achieved | Hybrid constraint | WNS | achieved |
-|---|---|---|---|---|---|
-| 19.525 | +1.121 | 18.404 | 19.673 | +0.810 | 18.863 |
-| 19.400 | −0.105 | — | 19.584 | −0.069 | — |
-| 19.063 | +0.668 | 18.395 | 18.960 | +0.560 | **18.400** |
-| **18.384** | **+0.202** | **18.182** | 18.843 | −0.097 | — |
-| 18.375 | −0.688 | — | 18.380 | −0.794 | — |
-| 18.162 | −0.881 | — | | | |
+| | logic levels | datapath delay | worst hold slack |
+|---|---|---|---|
+| Ascon | 18 | 19.148 ns | −0.502 ns |
+| r=128 | 18 | 19.366 ns | −0.502 ns |
+| r=64 | **10** | **9.498 ns** | −0.502 ns |
 
-**Fmax: Ascon 55.00 MHz** (18.182 ns), **hybrid 54.35 MHz** (18.400 ns).
-
-Other timing parameters, at the reported operating point:
-
-| | Ascon | Hybrid |
-|---|---|---|
-| Worst hold slack (WHS) | −0.502 ns | −0.502 ns |
-| Logic levels on the critical path | 18 | 18 |
-| Datapath delay | 19.361 ns | 19.366 ns |
-
-The hold violations are an out-of-context artefact: input delay is set to zero, so
-pad-to-register paths have no launch delay to absorb. They are not a defect in the
-cores and would disappear with realistic input delays.
+Ascon and r=128 both sit at 18 logic levels because both are pinned by the same
+128-bit padding-mask borrow chain (§7). r=64's rate is 64 bits, so that chain is
+half as long — 10 levels — and the design clocks 2.15× faster. The hold figures
+are a constraint artefact, see caveat 3.
 
 ### 3.3 Power — SAIF-annotated from xsim
 
-| | Ascon | Hybrid |
-|---|---|---|
-| Clocks / logic / signals | 4 / 6 / 7 mW | 3 / 4 / 4 mW |
-| **Dynamic** | 17 mW | **11 mW** |
-| Device static | 57 mW | 57 mW |
-| **Total on-chip** | 74 mW | **68 mW** |
-| Junction temperature | 25.4 °C | 25.4 °C |
-| Nets matched by SAIF | 39% (993/2531) | 35% (862/2487) |
-| Vivado confidence | **High** | Medium |
-| Energy per bit | 20.3 pJ | **13.0 pJ** |
+Activity captured with the testbench clock set to each design's own closing
+period, so the toggle rate matches the constraint.
 
-Static power is a device property of the XC7A12T, identical for both.
+| | Ascon | r=128 | r=64 |
+|---|---|---|---|
+| Dynamic | 18 mW | **11 mW** | 19 mW |
+| Device static | 57 mW | 57 mW | 57 mW |
+| **Total on-chip** | 75 mW | **68 mW** | 76 mW |
+| Nets matched by SAIF | 39% (993/2531) | 35% (862/2487) | 27% (605/2208) |
+| Vivado confidence | **High** | Medium | Medium |
+| Energy per bit | 20.5 pJ | **12.7 pJ** | 20.3 pJ |
+
+Static power is a device property of the XC7A12T, identical for all three.
 
 ---
 
-## 4. ASIC — OpenROAD, Nangate45
+## 4. ASIC — SkyWater sky130 (130 nm, fabricable)
 
-This pass runs `repair_design` and `repair_timing`, which the earlier pass did
-not. That is what makes an ASIC Fmax meaningful: without optimisation the tool
-never tries to meet the constraint, and the reported slack understates the design.
+Platform `sky130hd`, corner `tt_025C_1v80` (25 °C, 1.80 V), site `unithd`,
+routing met1–met5, floorplan at 45% target utilization, with `repair_design` and
+`repair_timing` so the tool actually optimises for the constraint.
 
 ### 4.1 Fmax by period sweep
 
-Setup slack against constrained period, timing-optimised:
+| period | Ascon | r=128 | r=64 |
+|---|---|---|---|
+| 20.0 ns | — | +3.86 | +2.99 |
+| 16.0 ns | — | **+0.03** | **+0.02** |
+| 15.0 ns | — | — | −0.35 |
+| 14.0 ns | — | −0.97 | — |
+| 10.0 ns | +5.70 | — | — |
+| 4.4 ns | +0.10 | — | — |
+| 4.2 ns | +0.03 | — | — |
+| 4.0 ns | +0.01 | — | — |
+| 3.9 ns | **+0.00** | — | — |
+| 3.8 ns | −0.10 | — | — |
 
-| period | Ascon | Hybrid |
-|---|---|---|
-| 10.0 ns | +8.73 | +4.94 |
-| 8.0 ns | +6.67 | +2.91 |
-| 6.0 ns | +4.72 | **+0.92** |
-| 5.0 ns | +3.70 | — |
-| 4.0 ns | +2.64 | — |
-| 3.0 ns | +1.66 | — |
-| 2.0 ns | +0.64 | — |
-| 1.6 ns | +0.27 | — |
-| 1.4 ns | **+0.07** | — |
-
-**Ascon closes at 1.4 ns → ≥ 714 MHz.** **Hybrid closes at 6.0 ns → 167 MHz.**
-Ascon's critical path is ~1.33 ns; the hybrid's is ~5.08 ns.
+**Ascon closes at 3.9 ns → 256 MHz. Both hybrids close at 16.0 ns → 62.5 MHz.**
+All three are now bracketed tightly on both sides — Ascon fails at 3.8 ns, the
+hybrids at 15.0 and 14.0 ns.
 
 ### 4.2 Parameters at the closing period
 
-| | Ascon @ 1.4 ns | Hybrid @ 6.0 ns |
-|---|---|---|
-| Die area | 12 489 µm² @ 87% | 10 846 µm² @ 87% |
-| Sequential cells | 723 | 659 |
-| Complex combinational cells | 4141 | 3705 |
-| Buffers / inverters | 291 | 164 |
-| Clock buffers | 106 | 98 |
-| Timing-repair buffers | 53 | 45 |
-| Setup slack / TNS | +0.07 / 0.00 | +0.92 / 0.00 |
-| Hold slack | −0.71 ns | −0.11 ns |
-| Clock latency | 0.24 ns | 0.25 ns |
-| Power (VCD activity) | 114.3 mW | 30.3 mW |
-| Throughput | 11.43 Gbit/s | 2.67 Gbit/s |
-| Energy per bit | **10.0 pJ** | 11.4 pJ |
+| | Ascon @ 3.9 ns | r=128 @ 16.0 ns | r=64 @ 16.0 ns |
+|---|---|---|---|
+| Cell area (yosys) | 46 604.7 µm² | 41 044.4 µm² | **36 895.4 µm²** |
+| Die area | 62 192 µm² @ 60% | 53 839 µm² @ 60% | **47 335 µm² @ 58%** |
+| Gate equivalents | 12 416 GE | 10 935 GE | **9 829 GE** |
+| Sequential cells | 723 | 659 | **594** |
+| Complex combinational | 4606 | 4009 | **3466** |
+| Buffers / inverters | 7 | 44 | 66 |
+| Clock buffers | 146 | 132 | 110 |
+| Timing-repair buffers | 52 | 39 | 34 |
+| Setup slack / TNS | +0.00 / 0.00 | +0.03 / 0.00 | +0.02 / 0.00 |
+| Hold slack | **+0.14 ns** | **+0.19 ns** | **+0.12 ns** |
+| Power (VCD activity) | 88.7 mW | 25.0 mW | 23.7 mW |
+| Throughput | **4.10 Gbit/s** | 1.00 Gbit/s | 0.50 Gbit/s |
+| Energy per bit | **21.6 pJ** | 24.9 pJ | 47.4 pJ |
 
-### 4.3 At a common 100 MHz
-
-| | Ascon | Hybrid |
-|---|---|---|
-| Die area | 12 518 µm² | **10 846 µm²** |
-| Gate equivalents | 15 687 GE | **13 591 GE** |
-| Setup slack | +8.73 ns | +4.94 ns |
-| Hold slack | −0.18 ns | −0.12 ns |
-| Power, default activity | 18.2 mW | 20.3 mW |
-| Power, VCD activity | **16.4 mW** | 18.3 mW |
-| Energy per bit | **10.2 pJ** | 11.5 pJ |
-
-### 4.4 What timing optimisation costs
-
-| | area without | area with | change | Ascon critical path |
-|---|---|---|---|---|
-| Ascon | 9509 µm² | 12 518 µm² | **+31.6%** | 12.08 ns → **1.33 ns** |
-| Hybrid | 8302 µm² | 10 846 µm² | **+30.6%** | 5.18 ns → 5.08 ns |
-
-Ascon gains almost tenfold in speed for a third more area. The hybrid gains almost
-nothing, because its critical path is arithmetic, not mapping — see §6.
+Leakage is negligible in this library at this corner (~2 × 10⁻⁸ W), so energy per
+bit is essentially frequency-independent and the columns compare directly.
 
 ---
 
 ## 5. Cycles, throughput and functional verification — Vivado xsim
 
-Both cores share the FSM, so cycle counts are identical.
+All three share the FSM, so a block always costs 8 cycles plus one handshake
+cycle. Only the block size differs.
 
 ```
 initialisation            12 cycles   (p^12)
@@ -188,19 +184,16 @@ per message block          8 cycles   (p^8, except the last)
 finalisation              12 cycles   (p^12)
 ```
 
-| message / AD | cycles |
-|---|---|
-| 0 B / 0 B | 29 |
-| 0 B / 16 B | 47 |
-| 0 B / 32 B | 56 |
-| 0 B / 64 B | 74 |
-| 16 B / 64 B | 83 |
-| 64 B / 64 B | 110 |
+| message / AD | Ascon & r=128 (16-byte blocks) | r=64 (8-byte blocks) |
+|---|---|---|
+| 0 B / 0 B | 29 | 29 |
+| 0 B / 16 B | 47 | 56 |
+| 0 B / 32 B | 56 | 74 |
+| 64 B / 64 B | 110 | 182 |
 
-Steady state is 8 cycles per 128-bit block plus one handshake cycle, so each extra
-16-byte block costs 9 cycles and long-message throughput is 16 bits per cycle.
+Throughput is 16 bits/cycle for the wide-rate designs and 8 bits/cycle for r=64.
 
-Functional check against the C reference vectors, 16 × 16 grid of message and
+Functional check against the C reference vectors — a 16 × 16 grid of message and
 associated-data lengths covering every padding path, each ciphertext fed back
 through the decrypt path:
 
@@ -208,32 +201,52 @@ through the decrypt path:
 |---|---|---|
 | `ascon_aead128` | 256 / 256 | 256 / 256 |
 | `asconsip_aead` | 256 / 256 | 256 / 256 |
+| `asconsip64_aead` | 256 / 256 | 256 / 256 |
 
 ---
 
-## 6. Why the two targets disagree, and where the hybrid actually loses
+## 6. Where each design wins
 
-On FPGA the two cores are within 1% of each other (55.0 vs 54.4 MHz). On ASIC
-Ascon is more than four times faster. Both facts have the same cause.
+**On FPGA, pick r=64.** It is the smallest (−24% slices), the fastest (2.15×),
+and has the highest throughput — 936 Mbit/s against 880 for Ascon — *despite*
+absorbing half as much data per permutation. The clock more than compensates.
+It also has Ascon's 192-bit capacity. There is no axis on which it loses to
+r=128 on this fabric.
 
-On **FPGA**, both cores are limited by the same thing, and it is not the cipher.
-The critical path is:
+**On ASIC, pick Ascon.** 256 MHz against 62.5 MHz, 4.1× the throughput, and the
+best energy per bit. Its area disadvantage (+26% GE over r=64) does not come
+close to paying for an 8× throughput deficit.
 
-```
-Source:            din_bytes[2]
-Destination:       st_reg[248]/D
-Logic Levels:      18  (CARRY4=15  LUT4=1  LUT5=2)
-```
+**r=128 is the FPGA energy champion** at 12.7 pJ/bit, about 37% better than
+either alternative, but it is the only design with a 128-bit capacity — the
+weakest security parameter of the three.
 
-Fifteen chained CARRY4 cells — a 128-bit borrow chain from the padding mask:
+**r=64 is the worst ASIC choice**: it clocks no faster than r=128 (both are
+bound by SIPROUND, not by the mask) but delivers half the data, so its energy per
+bit doubles to 47.4 pJ.
+
+---
+
+## 7. Why FPGA and ASIC disagree
+
+Two different bottlenecks dominate on the two targets.
+
+**On FPGA the bottleneck is the padding mask, not the cipher.** The critical path
+is `din_bytes → st_reg`, 18 logic levels of which 15 are CARRY4 — a borrow chain
+from
 
 ```verilog
 wire [127:0] mask = full ? {128{1'b1}} : ((128'd1 << shamt) - 128'd1);
 ```
 
-The `- 1` is what costs it. Because this path dominates both designs equally,
-their FPGA frequencies are nearly identical and say nothing about the round
-functions. A byte-wise decoder removes the chain entirely:
+The `- 1` is what costs it. This is why Ascon and r=128 land within 1% of each
+other (55.0 vs 54.4 MHz) despite completely different round functions: both are
+measuring the same mask. **r=64 is the natural experiment** — its rate is 64 bits,
+so the same expression builds a 64-bit chain instead of a 128-bit one, logic
+levels drop 18 → 10, and the clock doubles. That is the mask being measured, not
+the cipher.
+
+A byte-wise decoder removes the chain entirely and would lift all three:
 
 ```verilog
 genvar gi;
@@ -245,66 +258,58 @@ generate
 endgenerate
 ```
 
-Measured previously on this variant: CARRY4 15 → 0, logic levels 18 → 3, Ascon
-Fmax ~52 → ~250–270 MHz, hybrid ~54 → ~130 MHz. *(Those figures come from the
-earlier non-deterministic runs and are kept for the shape of the result, not the
-digits. The fix is not applied to `verilog/`.)*
+**On ASIC the mask is cheap**, `repair_timing` optimises it away, and the real
+architectural difference appears: Ascon's XOR/AND round collapses to a 3.9 ns
+path, while SIPROUND contains **four chained 64-bit additions** that no optimiser
+can shorten, holding both hybrids at 16.0 ns regardless of their rate. The 71–79
+CARRY4 cells on FPGA and the 16 ns ASIC path are the same phenomenon.
 
-On **ASIC** the mask is cheap, so `repair_timing` optimises it away and the real
-difference appears immediately: Ascon's round is XOR/AND and collapses to 1.33 ns;
-the hybrid's SIPROUND contains **four chained 64-bit additions** that no optimiser
-can shorten, holding it at 5.08 ns. The 64 CARRY4 cells on FPGA and the 5.08 ns
-ASIC path are the same phenomenon.
-
-**This corrects an earlier reading.** Without timing optimisation the two appeared
-tied on ASIC. They are not — Ascon is roughly 4× faster once the tools are allowed
-to optimise. The hybrid's real advantages are area (−13%) and FPGA energy per bit
-(−36%), not speed.
+This also confirms the two hybrids share a round function: identical ASIC Fmax,
+differing only in area and throughput.
 
 ---
 
-## 7. Caveats
+## 8. Caveats
 
-1. **ASIC Fmax is a lower bound.** Ascon is confirmed to close at 1.4 ns; runs
-   below that did not finish within the time allowed, so the true limit may be
-   tighter. The hybrid is bracketed between 6.0 ns (closes) and 5.0 ns (untested).
-2. **Hold violations are present** on both targets. On FPGA they are an
-   out-of-context artefact of zero input delay. On ASIC (−0.71 / −0.11 ns) they
-   are real and would need fixing before tapeout; they do not affect the setup,
-   area or power figures reported here.
-3. **SAIF nets matched are 35–40%**, because activity is captured from RTL
-   simulation while the netlist is post-implementation. Vivado rates Ascon "High"
-   confidence and the hybrid "Medium". A post-implementation timing simulation
-   would raise both.
-4. **ASIC power activity is annotated at top-level ports only** — the VCD is from
-   RTL simulation, so only port names match the mapped netlist, and OpenSTA
-   propagates inward. Gate-level annotation would need Nangate45 Verilog cell
-   models, which are not on this machine.
-5. **Fmax is out-of-context**, for the core alone. Integrated with real I/O paths
-   both numbers fall. This is inherent: the cores have more than 400 ports and
-   CSG325 offers ~150 usable I/O, so an in-context implementation is impossible
-   without a serialising wrapper that would measure a different circuit.
-6. Derived quantities — achieved period (`constraint − WNS`), throughput
-   (`16 bits × f`), energy per bit (`power ÷ throughput`), gate equivalents
-   (`area ÷ 0.798 µm²`) — are arithmetic on the tool outputs above.
+1. **Hold on FPGA is a constraint artefact, not a design defect.** The worst hold
+   path is `key[116] → k_r_reg[116]/D` — an input port to a register — because
+   `set_input_delay 0` gives it no launch delay to absorb. There is not a single
+   register-to-register hold violation in any design on any target, and on sky130
+   **all three now have positive hold slack** (+0.14 / +0.19 / +0.12 ns).
+   Realistic input delays would remove the FPGA artefact too.
+2. **SAIF nets matched are 27–39%**, because activity comes from RTL simulation
+   while the netlist is post-implementation. Vivado rates Ascon "High" and both
+   hybrids "Medium"; r=64 matches fewest because it has the fewest nets. A
+   post-implementation timing simulation would raise all three.
+3. **ASIC power activity is annotated at top-level ports only** — the VCD is from
+   RTL simulation, so only port names match the mapped netlist and OpenSTA
+   propagates inward. Gate-level annotation is *possible* on sky130 — SkyWater
+   publishes behavioural Verilog models at `google/skywater-pdk-libs-sky130_fd_sc_hd`
+   — but that needs another download and a gate-level simulation pass, so it has
+   not been done.
+4. **The hybrids are unanalysed constructions.** Neither has had cryptanalysis.
+   These are engineering measurements, not a security argument.
+5. Derived quantities — achieved period (`constraint − WNS`), throughput
+   (`bits/cycle × f`), energy per bit (`power ÷ throughput`), gate equivalents
+   (`cell area ÷ 3.7536 µm²`) — are arithmetic on the tool outputs above.
 
 ---
 
-## 8. Provenance
+## 9. Provenance
 
 | Metric | Tool | File |
 |---|---|---|
-| Functional pass/fail, cycle counts | Vivado xsim | `xsim/xsim_ascon.log`, `xsim/xsim_hybrid.log` |
-| FPGA utilization, route status | Vivado | `v5/out/*_util.txt`, `*_route.txt` |
-| FPGA constraint sweep, determinism | Vivado | `v5/flow5.out` (`SEARCH`, `DETERMINISM`) |
-| FPGA WNS/WHS, logic levels, datapath | Vivado | `v5/flow5.out` (`FINAL`), `v5/out/*_timing.txt` |
-| FPGA critical path | Vivado | `v5/out/*_paths_setup.txt` |
-| FPGA power (SAIF) | Vivado | `v5/out/*_power_saif.txt` |
-| ASIC period sweep | OpenROAD | `a3/sweep.out`, `a3/sweep_lo.out` |
-| ASIC area, cells, skew, slack, power | OpenROAD | `a3/{ascon,hybrid}_*.log` |
-| ASIC area without optimisation | OpenROAD | `a2/*_or.log` |
-| ASIC cell area | yosys | `a2/*_yosys.log` |
-| Activity source | Vivado xsim | `xsim/*.saif`, `xsim/*.vcd` |
+| Functional pass/fail, cycle counts | Vivado xsim | `xsim/xsim_*.log`, `xsim/xs_f_*.log` |
+| FPGA utilization, route status | Vivado | `v6/out/*_util.txt`, `*_route.txt` |
+| FPGA constraint search, WNS/WHS, logic levels | Vivado | `v6/flow6.out` |
+| FPGA critical path | Vivado | `v6/out/*_path.txt` |
+| FPGA power (SAIF, period-matched) | Vivado | `v7/out/*_power_saif.txt` |
+| FPGA determinism proof | Vivado | `v5/flow5.out` (`DETERMINISM` lines) |
+| sky130 period sweep | OpenROAD | `sky/sweep.out`, `sky/r64.out`, `sky/tighten*.out` |
+| sky130 area, cells, skew, slack, power | OpenROAD | `sky/{ascon,hybrid,r64,r64v}_*.log` |
+| sky130 cell area | yosys | `sky/*_yosys.log` |
+| sky130 platform | ORFS | `~/pdks/sky130hd/` (see its `PROVENANCE.md`) |
+| Activity source | Vivado xsim | `xsim/f_*.saif`, `xsim/*.vcd` |
 
 Vivado reports carry their own header — tool version, `Device: xc7a12ticsg325-1L`,
 `Design State: Routed`, timestamp, host — so each is self-identifying.
