@@ -6,7 +6,10 @@ comparison — C and Verilog implementations of all nine algorithms that lost
 to Ascon in the final round of NIST's Lightweight Cryptography competition.
 Everything here is either vendored official source or a from-scratch Verilog
 transliteration of one; nothing is a new cipher design except the two
-hybrids, which are unanalysed and not a security recommendation.
+hybrids, which are unanalysed and not a security recommendation. All twelve
+hardware cores — Ascon, both hybrids, and the nine finalists — live together
+in one directory and are measured together in one report, because that is
+what they are: Ascon and the field it beat, not two separate projects.
 
 ## Layout
 
@@ -15,33 +18,52 @@ ascon-aead128/       official Ascon C reference (NIST SP 800-232), vendored
 siphash/              official SipHash C reference, vendored
 ascon-siphash/        the two hybrid AEAD constructions (C), see its README
 lwc-finalists/        official reference C of the 9 non-winning NIST LWC finalists
-verilog/              3 hardware cores: Ascon, and the two hybrids — see its README
-verilog-finalists/    9 hardware cores, one per finalist — see its README
-RESULTS.md            Vivado + OpenROAD measurements for the 3 verilog/ cores
+verilog/              all 12 hardware cores — Ascon, both hybrids, 9 finalists — see its README
+RESULTS.md            Vivado + OpenROAD hardware measurements for all 12 verilog/ cores
+graphs/               PNG charts + CSV + Python script for RESULTS.md's data
+SOFTWARE-RESULTS.md   native x86_64 software measurements (RAM/ROM/stack/latency/throughput) for all 12
+software/             its CSV, charts, methodology notes, and reproducible benchmark harness
 ```
 
 Each vendored C directory (`ascon-aead128/`, `siphash/`, `lwc-finalists/*/`)
 keeps its own upstream README/license; `lwc-finalists/PROVENANCE.md` records
-exactly what was fetched from where. `ascon-siphash/`, `verilog/` and
-`verilog-finalists/` are this project's own work and each has a README
-explaining what's inside and, for the Verilog cores, how thoroughly each one
-has actually been checked.
+exactly what was fetched from where. `ascon-siphash/` and `verilog/` are
+this project's own work and each has a README explaining what's inside and
+how thoroughly each core has actually been checked.
 
 ## What's verified vs. what's a transliteration
 
-- The **3 cores in `verilog/`** (Ascon-AEAD128 and both hybrids) are the ones
-  `RESULTS.md` reports Vivado/OpenROAD numbers for. See `verilog/README.md`.
-- Of the **9 cores in `verilog-finalists/`**, only `tinyjambu_lwc.v` has been
-  run against the official KAT vectors in simulation. The other eight are
-  lint-clean in both Verilator and Vivado but not simulation-verified — each
-  file's header says so, and `verilog-finalists/README.md` has the full
-  breakdown. None of the 9 has hardware measurements (no `RESULTS.md`
-  equivalent).
+Of the twelve cores in `verilog/`, three (Ascon-AEAD128 and both hybrids)
+are functionally verified via Vivado `xsim` against the C reference; one of
+the remaining nine (`tinyjambu_lwc.v`) is verified against the official NIST
+KAT vectors; the other eight are lint-clean in both Verilator and Vivado but
+**not** simulation-verified — each file's header says so, and
+`verilog/README.md` has the full per-file breakdown. `RESULTS.md` reports
+Vivado/OpenROAD hardware numbers for all twelve together, with the depth of
+measurement (and hence how much to trust each number) called out per design
+throughout — read its §1 and §8 before treating any figure as a performance
+or security recommendation.
 
 ## Interfaces
 
-`verilog/`'s three cores share one custom block-oriented interface (128-bit
-or 64-bit wide `din`/`dout`, explicit `din_ad`/`din_last`) documented at the
-top of `verilog/ascon_aead128.v`. `verilog-finalists/`'s nine cores instead
-all implement the NIST LWC Hardware API (GMU CERG PDI/SDI/DO word-stream
-protocol) — the two are not interchangeable; see each directory's README.
+The twelve cores in `verilog/` do not all share one port convention, and
+being in one directory doesn't change that: `ascon_aead128.v`,
+`asconsip_aead.v` and `asconsip64_aead.v` implement a custom block-oriented
+interface (128-bit or 64-bit wide `din`/`dout`, explicit `din_ad`/
+`din_last`), documented at the top of `ascon_aead128.v`; the other nine
+implement the NIST LWC Hardware API (GMU CERG PDI/SDI/DO word-stream
+protocol) instead. The two are not port-compatible — see `verilog/README.md`
+for which is which and why — but they are still one comparison at the
+algorithm level, which is what `RESULTS.md` measures.
+
+## Hardware vs. software
+
+`RESULTS.md` measures the twelve Verilog cores; `SOFTWARE-RESULTS.md`
+measures the same twelve algorithms' **official reference C**, compiled
+natively (no embedded cross-compiler on this machine — see its §1). The two
+studies genuinely disagree in places, on purpose: Elephant and PHOTON-Beetle
+are unremarkable in hardware but three to four orders of magnitude slower
+than everything else in reference software, because both use bit/nibble-
+serial operations hardware is good at and a CPU is bad at
+(`SOFTWARE-RESULTS.md` §4.1). Read them side by side, not as two votes for
+the same answer.

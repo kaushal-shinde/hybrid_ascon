@@ -4,7 +4,7 @@
 // apply here unchanged).
 //
 // WARNING: GIFT-COFB did NOT win the NIST LWC competition -- Ascon did. This
-// core exists for hardware comparison against the Ascon cores in verilog/,
+// core exists for hardware comparison against ascon_aead128.v (this directory),
 // not as a recommendation. It has been lint-checked (Verilator and Vivado
 // xvlog/xelab) but, unlike tinyjambu_lwc.v, has NOT been run against the
 // official KAT vectors in simulation -- say so plainly if quoting this

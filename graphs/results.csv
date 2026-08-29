@@ -1,0 +1,13 @@
+design,verified,fpga_lut,fpga_reg,fpga_fmax_mhz,fpga_power_mw,fpga_power_measured,sky130_area_um2,sky130_ge,sky130_fmax_mhz,sky130_power_mw,sky130_power_measured
+Ascon-AEAD128,yes,1101,728,55.00,75.0,yes,46605,12416,256.0,88.700,yes
+hybrid r=128,yes,1021,663,54.35,68.0,yes,41044,10935,62.5,25.000,yes
+hybrid r=64,yes,873,599,117.03,76.0,yes,36895,9829,62.5,23.700,yes
+tinyjambu,yes,472,533,214.13,76.0,no,26514,7064,257.1,3.071,no
+xoodyak,no,1500,884,124.27,94.0,no,69313,18466,235.3,4.984,no
+giftcofb,no,1330,1003,121.79,66.0,no,58380,15553,198.0,8.079,no
+grain128aead,no,576,915,176.09,78.0,no,39105,10418,242.7,4.273,no
+sparkle,no,2363,1092,65.72,96.0,no,128429,34215,40.1,232.530,no
+elephant,no,4604,2463,47.49,66.0,no,167686,44673,62.8,13.104,no
+isap,no,2368,1657,139.18,96.0,no,103945,27692,188.0,26.215,no
+photonbeetle,no,1914,1118,114.20,78.0,no,101346,27000,122.5,3.540,no
+romulus,no,1319,1419,132.80,70.0,no,82316,21930,205.8,7.360,no

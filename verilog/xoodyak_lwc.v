@@ -4,7 +4,7 @@
 // apply here unchanged).
 //
 // WARNING: Xoodyak did NOT win the NIST LWC competition -- Ascon did. This
-// core exists for hardware comparison against the Ascon cores in verilog/,
+// core exists for hardware comparison against ascon_aead128.v (this directory),
 // not as a recommendation.
 //
 // Algorithm: transliterated from the official reference C,

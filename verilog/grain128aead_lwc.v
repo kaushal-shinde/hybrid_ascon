@@ -3,8 +3,8 @@
 // full API citation; same ports, opcodes and segment-header format).
 //
 // WARNING: Grain-128AEAD did NOT win the NIST LWC competition -- Ascon did.
-// This core exists for hardware comparison against the Ascon cores in
-// verilog/, not as a recommendation. Lint-checked (Verilator + Vivado) but
+// This core exists for hardware comparison against ascon_aead128.v (this
+// directory), not as a recommendation. Lint-checked (Verilator + Vivado) but
 // NOT run against the official KAT vectors in simulation -- unlike
 // tinyjambu_lwc.v. It is a careful transliteration, not a confirmed-correct
 // one.

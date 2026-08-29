@@ -3,15 +3,15 @@
 // full API citation; same ports, opcodes and segment-header format).
 //
 // WARNING: ISAP did NOT win the NIST LWC competition -- Ascon did. This core
-// exists for hardware comparison against the Ascon cores in verilog/, not as
-// a recommendation. Lint-checked (Verilator + Vivado) but NOT run against the
-// official KAT vectors in simulation -- unlike tinyjambu_lwc.v. It is a
-// careful transliteration, not a confirmed-correct one.
+// exists for hardware comparison against ascon_aead128.v (this directory),
+// not as a recommendation. Lint-checked (Verilator + Vivado) but NOT run
+// against the official KAT vectors in simulation -- unlike tinyjambu_lwc.v.
+// It is a careful transliteration, not a confirmed-correct one.
 //
 // Algorithm: transliterated from the official reference C in
 // ../lwc-finalists/isap/ (isap.c + Ascon-reference.c + crypto_aead.c, ISAP-A
 // variant: the permutation is plain Ascon-p, reused unmodified from the
-// verilog/ascon_aead128.v round function -- see below). Key = 16 B,
+// ascon_aead128.v's round function -- see below). Key = 16 B,
 // Npub = 16 B, tag = 16 B (CRYPTO_ABYTES=16, unlike Grain/Elephant).
 //
 // STATE / PERMUTATION: ISAP's state is 40 bytes = 320 bits = Ascon's own
