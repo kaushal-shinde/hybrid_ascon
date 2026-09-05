@@ -1,0 +1,5 @@
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/photon-beetle/encrypt.c:167:13:HASH	80	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/photon-beetle/encrypt.c:148:13:rhoohr	48	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/photon-beetle/encrypt.c:191:13:ENCorDEC	96	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/photon-beetle/encrypt.c:235:5:crypto_aead_encrypt	128	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/photon-beetle/encrypt.c:290:5:crypto_aead_decrypt	144	static

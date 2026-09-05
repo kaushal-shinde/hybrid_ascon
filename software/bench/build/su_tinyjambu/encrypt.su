@@ -1,0 +1,5 @@
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/tinyjambu/encrypt.c:21:6:state_update	24	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/tinyjambu/encrypt.c:40:6:initialization	48	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/tinyjambu/encrypt.c:60:6:process_ad	80	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/tinyjambu/encrypt.c:83:5:crypto_aead_encrypt	128	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/tinyjambu/encrypt.c:140:5:crypto_aead_decrypt	112	static

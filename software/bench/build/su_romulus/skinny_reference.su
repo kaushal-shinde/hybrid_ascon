@@ -1,0 +1,7 @@
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/romulus/skinny_reference.c:76:6:AddKey	128	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/romulus/skinny_reference.c:129:6:AddConstants	8	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/romulus/skinny_reference.c:137:6:SubCell8	8	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/romulus/skinny_reference.c:148:6:ShiftRows	8	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/romulus/skinny_reference.c:176:6:MixColumn	8	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/romulus/skinny_reference.c:195:6:enc	128	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/romulus/skinny_reference.c:243:6:skinny_128_384_plus_enc	8	static

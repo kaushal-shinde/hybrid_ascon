@@ -26,9 +26,14 @@
 // PHOTON's GF(2^4) MixColumn -- this cipher needs no field arithmetic at
 // all). State/tweakey cells are represented as flat 128-bit vectors with
 // byte idx (0..15, row idx/4, col idx%4, matching the reference's
-// state[i>>2][i&0x3] indexing) at bits [127-8*idx -: 8] -- the same
-// "array-index order, no bswap" convention as isap_lwc.v/photonbeetle_lwc.v,
-// since PDI's MSB-first-per-word convention already matches it.
+// state[i>>2][i&0x3] indexing) at bits [127-8*idx -: 8] -- byte 0 in the
+// MSB, matching pad_block's own indexing below. CORRECTION (found via
+// KAT, wrong from the very first record): this file originally assumed
+// the LWC bus itself delivers bytes MSB-first per word and needed no
+// swap -- it doesn't. The bus is little-endian (byte 0 in pdi_data[7:0]),
+// confirmed by tinyjambu_lwc.v/xoodyak_lwc.v/giftcofb_lwc.v's own KAT
+// runs; bswap32() below converts at every bus-facing load and output
+// site (key_r, npub_r, blk_in, out_word, tag_word).
 //
 // TWEAKEY SCHEDULE: each round, ALL THREE cells go through the same fixed
 // byte permutation (tweakey_perm, from TWEAKEY_P[] -- new_cell[idx] =
@@ -598,6 +603,24 @@ module romulus_n_lwc (
 
   // pad(): real bytes for i<len, 0 for len<=i<15, (len&0xF) at byte 15 when
   // len<16 (a "complete" 16-byte block is returned unchanged).
+  // BYTE ORDER: every 128-bit block here (blk_in, tbc_T, key_r, s...)
+  // represents byte i at bits [127-8i -: 8] -- byte 0 in the MSB, matching
+  // pad_block's own indexing below and SKINNY's usual byte-array
+  // convention. The LWC bus, though, delivers each word little-endian
+  // (byte 0 in pdi_data[7:0] -- the convention tinyjambu_lwc.v,
+  // xoodyak_lwc.v and giftcofb_lwc.v all use and that their KAT runs
+  // confirmed). Loading bus words into key_r/npub_r/blk_in via a plain
+  // shift-in, and reading tag/ciphertext words straight out of `s`/
+  // `out_blk`, without correcting for that mismatch, put every byte in the
+  // right 4-byte GROUP but the wrong order within it -- exactly the same
+  // bug class found and fixed in giftcofb_lwc.v, checked for here
+  // proactively after that experience rather than rediscovered from
+  // scratch (it still took a from-scratch KAT run to notice the pattern).
+  function [31:0] bswap32;
+    input [31:0] w;
+    begin bswap32 = {w[7:0], w[15:8], w[23:16], w[31:24]}; end
+  endfunction
+
   function [127:0] pad_block;
     input [127:0] blk;
     input [15:0]  len;
@@ -620,7 +643,11 @@ module romulus_n_lwc (
   wire [7:0]  plain_byte [0:15];
   generate
     for (gi = 0; gi < 16; gi = gi + 1) begin : g_msg
-      assign out_byte[gi]   = ks[127-8*gi -: 8] ^ blk_byte[gi];
+      // Reference rho/irho explicitly zero the output byte (c[i]/m[i])
+      // for i >= len8 on a short final block instead of leaking ks^stale
+      // -- required both by the spec and by the API's Sec. 2.7 "clear
+      // unused output portions" rule.
+      assign out_byte[gi]   = (gi < pt_blk_len) ? (ks[127-8*gi -: 8] ^ blk_byte[gi]) : 8'd0;
       assign plain_byte[gi] = decrypt_r ? out_byte[gi] : blk_byte[gi];
     end
   endgenerate
@@ -679,8 +706,8 @@ module romulus_n_lwc (
                     (fsm == S_OUT_STATUS);
   assign do_last  = (fsm == S_OUT_STATUS);
 
-  wire [31:0] out_word = out_blk[127-32*{30'd0,owc} -: 32];
-  wire [31:0] tag_word = s[127-32*{30'd0,wcnt} -: 32];
+  wire [31:0] out_word = bswap32(out_blk[127-32*{30'd0,owc} -: 32]);
+  wire [31:0] tag_word = bswap32(s[127-32*{30'd0,wcnt} -: 32]);
 
   assign do_data =
       (fsm == S_DO_PTHDR)  ? {(decrypt_r ? SEGT_PT : SEGT_CT), 1'b0, 1'b0,
@@ -712,7 +739,7 @@ module romulus_n_lwc (
         end
         S_SDI_HDR: if (sdi_valid) begin wcnt <= 2'd0; fsm <= S_SDI_KEY; end
         S_SDI_KEY: if (sdi_valid) begin
-          key_r <= {key_r[95:0], sdi_data};
+          key_r <= {key_r[95:0], bswap32(sdi_data)};
           wcnt  <= wcnt + 2'd1;
           if (wcnt == 2'd3) fsm <= S_IDLE;
         end
@@ -724,7 +751,7 @@ module romulus_n_lwc (
         end
         S_PDI_NHDR: if (pdi_valid) begin wcnt <= 2'd0; fsm <= S_PDI_NDATA; end
         S_PDI_NDATA: if (pdi_valid) begin
-          npub_r <= {npub_r[95:0], pdi_data};
+          npub_r <= {npub_r[95:0], bswap32(pdi_data)};
           wcnt   <= wcnt + 2'd1;
           if (wcnt == 2'd3) begin
             s   <= 128'd0;
@@ -746,7 +773,17 @@ module romulus_n_lwc (
 
         // odd block: rho_ad -- pad + XOR-absorb, no TBC call.
         S_AD_ODD_COLL: if (pdi_valid) begin
-          blk_in <= {blk_in[95:0], pdi_data};
+          // Positional (not shift-in) write: a shift register only lands
+          // data left-aligned when exactly 4 words are collected. Every
+          // partial (<16-byte) AD/PT block collects fewer words, and a
+          // shift-in would land them at the bottom of blk_in instead of
+          // top-aligned at byte 0 -- and blk_in is only cleared on global
+          // reset, so the unused high bytes would carry over stale content
+          // from a previous block instead of being predictable. Writing
+          // each word to its final slot by wsel sidesteps both problems;
+          // pad_block() below never reads past byte (len-1) so the
+          // never-written high word(s) of a short block don't matter.
+          blk_in[127-32*{30'd0,wsel} -: 32] <= bswap32(pdi_data);
           if (wsel == ad_words_m1) begin wsel <= 2'd0; fsm <= S_AD_ODD_ABS; end
           else wsel <= wsel + 2'd1;
         end
@@ -771,7 +808,17 @@ module romulus_n_lwc (
 
         // even block: used as the TWEAK of a full TBC call (domain 0x08).
         S_AD_EVN_COLL: if (pdi_valid) begin
-          blk_in <= {blk_in[95:0], pdi_data};
+          // Positional (not shift-in) write: a shift register only lands
+          // data left-aligned when exactly 4 words are collected. Every
+          // partial (<16-byte) AD/PT block collects fewer words, and a
+          // shift-in would land them at the bottom of blk_in instead of
+          // top-aligned at byte 0 -- and blk_in is only cleared on global
+          // reset, so the unused high bytes would carry over stale content
+          // from a previous block instead of being predictable. Writing
+          // each word to its final slot by wsel sidesteps both problems;
+          // pad_block() below never reads past byte (len-1) so the
+          // never-written high word(s) of a short block don't matter.
+          blk_in[127-32*{30'd0,wsel} -: 32] <= bswap32(pdi_data);
           if (wsel == ad_words_m1) begin wsel <= 2'd0; fsm <= S_AD_EVN_SET; end
           else wsel <= wsel + 2'd1;
         end
@@ -830,7 +877,17 @@ module romulus_n_lwc (
         end
 
         S_PT_COLL: if (pdi_valid) begin
-          blk_in <= {blk_in[95:0], pdi_data};
+          // Positional (not shift-in) write: a shift register only lands
+          // data left-aligned when exactly 4 words are collected. Every
+          // partial (<16-byte) AD/PT block collects fewer words, and a
+          // shift-in would land them at the bottom of blk_in instead of
+          // top-aligned at byte 0 -- and blk_in is only cleared on global
+          // reset, so the unused high bytes would carry over stale content
+          // from a previous block instead of being predictable. Writing
+          // each word to its final slot by wsel sidesteps both problems;
+          // pad_block() below never reads past byte (len-1) so the
+          // never-written high word(s) of a short block don't matter.
+          blk_in[127-32*{30'd0,wsel} -: 32] <= bswap32(pdi_data);
           if (wsel == pt_words_m1) begin wsel <= 2'd0; fsm <= S_PT_ABSORB; end
           else wsel <= wsel + 2'd1;
         end

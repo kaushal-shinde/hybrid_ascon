@@ -36,11 +36,16 @@
 //
 // BYTE ORDER: outside PHOTON_Permutation, the reference treats the 32-byte
 // state as a plain byte array (memcpy/XOR by index, e.g. concatenate(State,
-// Npub,16,Key,16)), with no bit-level reinterpretation -- so, as with
-// isap_lwc.v, building each byte by straight concatenation of arriving PDI
-// bytes (no bswap) already produces the right array, since the PDI bus's
-// own "first byte in bits[31:24]" convention matches "array index order"
-// directly.
+// Npub,16,Key,16)), with no bit-level reinterpretation -- so this core needs
+// each byte in "array index order" (byte 0 first). The LWC bus's own
+// convention is the OPPOSITE of that: byte 0 of a word sits in bits [7:0]
+// (confirmed empirically via KAT runs against tinyjambu_lwc.v and others in
+// this directory), not bits [31:24]. An earlier draft of this file claimed
+// the two conventions already matched and used every arriving word
+// unswapped; that was the same class of error found in romulus_n_lwc.v (and
+// its mirror image in sparkle_lwc.v), and every load, output and comparison
+// site here needs a `bswap32` -- worth checking in isap_lwc.v too, which
+// makes the identical "no bswap" claim.
 //
 // BEETLE MODE STRUCTURE (crypto_aead_encrypt/decrypt): state = Npub || Key
 // (no initial permutation). A rare genuine special case: if AD and message
@@ -325,6 +330,7 @@ module photonbeetle_lwc (
     integer   n, row, col, k;
     reg [7:0] byteval;
     reg [3:0] sum;
+    reg [3:0] fm_tmp;
     reg [255:0] o;
     begin
       // unpack
@@ -332,9 +338,13 @@ module photonbeetle_lwc (
         byteval = s[255 - 8*(n/2) -: 8];
         nib[n] = (n % 2 == 0) ? byteval[3:0] : byteval[7:4];
       end
-      // AddKey: cell(row,0) = cell(row*8) gets RC[row][rnd] XORed in
+      // AddKey: cell(row,0) = cell(row*8) gets RC[row][rnd] XORed in.
+      // rc_tab is indexed row*12+round (12 entries per row -- see its own
+      // header comment and case list); {row[2:0],rnd} computes row*16+round
+      // instead, which only coincides with the correct index when row==0.
+      // Every other row read the wrong round constant.
       for (row = 0; row < 8; row = row + 1)
-        nib[row*8] = nib[row*8] ^ rc_tab({row[2:0], rnd});
+        nib[row*8] = nib[row*8] ^ rc_tab(row*7'd12 + {3'd0, rnd});
       // SubCell
       for (n = 0; n < 64; n = n + 1)
         nib[n] = sbox4(nib[n]);
@@ -342,19 +352,32 @@ module photonbeetle_lwc (
       for (row = 0; row < 8; row = row + 1)
         for (col = 0; col < 8; col = col + 1)
           shifted[row*8+col] = nib[row*8 + ((col+row) % 8)];
-      // MixColumn: new[row][col] = XOR_k field_mult(MM[row][k], shifted[k][col])
+      // MixColumn: new[row][col] = XOR_k field_mult(MM[row][k], shifted[k][col]).
+      // Calling field_mult() inline inside the XOR expression, 64 times in
+      // this one loop nest, silently corrupted every result under Vivado
+      // xsim (drove the whole round to all-zero) -- the same simulator-
+      // specific scheduling bug found in xoodyak_lwc.v's rot5/rot14
+      // (`automatic` does not fix it either; a plain non-automatic function
+      // works fine as long as its result is captured in a temp variable by
+      // its own statement before use, rather than inlined into a larger
+      // expression).
       for (col = 0; col < 8; col = col + 1)
         for (row = 0; row < 8; row = row + 1) begin
           sum = 4'd0;
-          for (k = 0; k < 8; k = k + 1)
-            sum = sum ^ field_mult(mm_tab({row[2:0], k[2:0]}), shifted[k*8+col]);
+          for (k = 0; k < 8; k = k + 1) begin
+            fm_tmp = field_mult(mm_tab({row[2:0], k[2:0]}), shifted[k*8+col]);
+            sum = sum ^ fm_tmp;
+          end
           mixed[row*8+col] = sum;
         end
-      // repack
+      // repack -- inverse of the unpack above (n even -> low nibble of the
+      // byte, n odd -> high nibble); an earlier draft had these two
+      // branches' bit positions swapped, silently writing every nibble to
+      // the wrong half of its byte.
       o = 256'd0;
       for (n = 0; n < 64; n = n + 1) begin
-        if (n % 2 == 0) o[255 - 8*(n/2) -: 4]     = mixed[n];
-        else            o[255 - 8*(n/2) - 4 -: 4] = mixed[n];
+        if (n % 2 == 0) o[255 - 8*(n/2) - 4 -: 4] = mixed[n];
+        else            o[255 - 8*(n/2) -: 4]     = mixed[n];
       end
       photon_round = o;
     end
@@ -363,6 +386,22 @@ module photonbeetle_lwc (
   // ROTR1 across an 8-byte half: out[i] = (in[i]>>1) | (in[(i+1)%8][0]<<7),
   // per the reference's byte-array formula (NOT a same-width scalar rotate
   // -- see file header).
+  // See the BYTE ORDER note in the file header: every bus word needs this
+  // applied on the way in (before landing in an array-index-order byte
+  // position) and on the way out.
+  function [31:0] bswap32;
+    input [31:0] w;
+    begin bswap32 = {w[7:0], w[15:8], w[23:16], w[31:24]}; end
+  endfunction
+
+  // A 1-bit rotate-right of the WHOLE 8-byte value (bit 0 of the whole
+  // thing wraps to bit 63), not a per-byte rotate: out[i]'s incoming top
+  // bit is in[i+1]'s bottom bit (in[0]'s for the wraparound last byte),
+  // matching the reference ROTR1's `(in[i+1]&1)<<7` / `(tmp&1)<<7`. An
+  // earlier draft used b[i]'s own bit 0 for bytes 0..6, rotating each
+  // byte in isolation instead -- correct only when a byte's own LSB
+  // happens to equal its successor's, so it passed hundreds of KAT
+  // records before a message finally exercised a byte pair that differed.
   function [63:0] rotr1_64;
     input [63:0] p;   // byte i at p[63-8i -: 8]
     reg [7:0] b [0:7];
@@ -370,7 +409,7 @@ module photonbeetle_lwc (
     integer i;
     begin
       for (i = 0; i < 8; i = i + 1) b[i] = p[63-8*i -: 8];
-      for (i = 0; i < 7; i = i + 1) o[i] = {b[i][0], 7'b0} | (b[i] >> 1);
+      for (i = 0; i < 7; i = i + 1) o[i] = {b[i+1][0], 7'b0} | (b[i] >> 1);
       o[7] = {b[0][0], 7'b0} | (b[7] >> 1);
       rotr1_64 = {o[0], o[1], o[2], o[3], o[4], o[5], o[6], o[7]};
     end
@@ -440,13 +479,18 @@ module photonbeetle_lwc (
     end
   endgenerate
 
+  // gi >= pt_eff_len is past the real message bytes of this (possibly
+  // short, final) block -- the API's Sec. 2.7 requires those output-word
+  // portions be cleared to zero rather than leaking keystream^stale-byte,
+  // the same requirement missed and fixed in grain128aead_lwc.v and
+  // romulus_n_lwc.v.
   wire [7:0] rho_out [0:15];
   generate
     for (gi = 0; gi < 8; gi = gi + 1) begin : g_rho_lo
-      assign rho_out[gi] = part2[63-8*gi -: 8] ^ blk_byte[gi];
+      assign rho_out[gi] = (gi < pt_eff_len) ? (part2[63-8*gi -: 8] ^ blk_byte[gi]) : 8'd0;
     end
     for (gi = 8; gi < 16; gi = gi + 1) begin : g_rho_hi
-      assign rho_out[gi] = part1_rotr[63-8*(gi-8) -: 8] ^ blk_byte[gi];
+      assign rho_out[gi] = (gi < pt_eff_len) ? (part1_rotr[63-8*(gi-8) -: 8] ^ blk_byte[gi]) : 8'd0;
     end
   endgenerate
 
@@ -509,8 +553,8 @@ module photonbeetle_lwc (
                     (fsm == S_OUT_STATUS);
   assign do_last  = (fsm == S_OUT_STATUS);
 
-  wire [31:0] out_word = out_blk[127-32*{30'd0,owc} -: 32];
-  wire [31:0] tag_word = state[255-32*{30'd0,wcnt} -: 32];
+  wire [31:0] out_word = bswap32(out_blk[127-32*{30'd0,owc} -: 32]);
+  wire [31:0] tag_word = bswap32(state[255-32*{30'd0,wcnt} -: 32]);
 
   assign do_data =
       (fsm == S_DO_PTHDR)  ? {(decrypt_r ? SEGT_PT : SEGT_CT), 1'b0, 1'b0,
@@ -540,7 +584,7 @@ module photonbeetle_lwc (
         end
         S_SDI_HDR: if (sdi_valid) begin wcnt <= 2'd0; fsm <= S_SDI_KEY; end
         S_SDI_KEY: if (sdi_valid) begin
-          key_r <= {key_r[95:0], sdi_data};
+          key_r <= {key_r[95:0], bswap32(sdi_data)};
           wcnt  <= wcnt + 2'd1;
           if (wcnt == 2'd3) fsm <= S_IDLE;
         end
@@ -552,10 +596,14 @@ module photonbeetle_lwc (
         end
         S_PDI_NHDR: if (pdi_valid) begin wcnt <= 2'd0; fsm <= S_PDI_NDATA; end
         S_PDI_NDATA: if (pdi_valid) begin
-          npub_r <= {npub_r[95:0], pdi_data};
+          // npub_r <= ... below only takes effect NEXT cycle -- reading
+          // npub_r directly here for the state concatenation would read
+          // its OLD value and silently drop this, the 4th and last,
+          // nonce word. Use the same right-hand-side expression instead.
+          npub_r <= {npub_r[95:0], bswap32(pdi_data)};
           wcnt   <= wcnt + 2'd1;
           if (wcnt == 2'd3) begin
-            state <= {npub_r, key_r};   // concatenate(State,N,16,K,16), no permute
+            state <= {npub_r[95:0], bswap32(pdi_data), key_r};   // concatenate(State,N,16,K,16), no permute
             fsm <= S_PDI_AHDR;
           end
         end
@@ -571,7 +619,17 @@ module photonbeetle_lwc (
         // S_AD_ABSORB -- so they stay valid for the whole collect loop
         // below without needing to be latched.
         S_AD_WORD: if (pdi_valid) begin
-          blk_in <= {blk_in[95:0], pdi_data};
+          // Positional (not shift-in) write: a shift register only lands
+          // data left-aligned when exactly 4 words are collected. Every
+          // partial (<16-byte) AD/PT block collects fewer words, and a
+          // shift-in would land them at the bottom of blk_in instead of
+          // top-aligned at byte 0 -- and blk_in is only cleared on global
+          // reset, so the unused high bytes would carry over stale content
+          // from a previous block instead of being predictably zero (the
+          // same bug found and fixed in romulus_n_lwc.v's blk_in). The
+          // absorb masks above only ever read blk_byte[bi] for bi <
+          // eff_len, which lies within the words actually written here.
+          blk_in[127-32*{30'd0,wsel} -: 32] <= bswap32(pdi_data);
           if (wsel == ad_coll_words[1:0] - 2'd1) begin
             wsel <= 2'd0;
             perm_state <= state; rnd_idx <= 4'd0; perm_ret <= S_AD_PERM_DN;
@@ -588,11 +646,22 @@ module photonbeetle_lwc (
           fsm <= S_AD_ABSORB;
         end
         S_AD_ABSORB: begin
-          state[127:0] <= state[127:0] ^ ad_absorb_mask;
+          // The rate is array bytes 0..15 (state[255:128], where Npub
+          // lands in Initialize and where part1/part2 read for the
+          // message-phase rho below) -- an earlier draft absorbed here
+          // into state[127:0] (bytes 16..31, the capacity) instead.
+          // Invisible on the empty-AD/empty-message record (which never
+          // reaches this state) and caught by the very next KAT record.
+          state[255:128] <= state[255:128] ^ ad_absorb_mask;
           ad_i <= ad_i + {11'd0, ad_eff_len};
           wsel <= 2'd0;
           if (ad_is_last) begin
-            state[7:0] <= state[7:0] ^ ad_absorb_mask[7:0] ^ {c0, 5'b0};
+            // XOR_const alone: the data+ozs-pad absorption (including the
+            // rate's own last byte, ad_absorb_mask[7:0]) is already fully
+            // covered by the state[255:128] update above -- re-XORing
+            // ad_absorb_mask[7:0] here too, into the unrelated capacity
+            // byte state[7:0], was the other half of the bug fixed above.
+            state[7:0] <= state[7:0] ^ {c0, 5'b0};
             fsm <= S_PDI_PHDR;
           end else begin
             fsm <= S_AD_WORD;
@@ -619,7 +688,17 @@ module photonbeetle_lwc (
         // S_PDI_PHDR/S_PT_OUT's loop-back through to S_PT_RHO, so
         // pt_coll_words/pt_eff_len/pt_is_last stay valid throughout.
         S_PT_WORD: if (pdi_valid) begin
-          blk_in <= {blk_in[95:0], pdi_data};
+          // Positional (not shift-in) write: a shift register only lands
+          // data left-aligned when exactly 4 words are collected. Every
+          // partial (<16-byte) AD/PT block collects fewer words, and a
+          // shift-in would land them at the bottom of blk_in instead of
+          // top-aligned at byte 0 -- and blk_in is only cleared on global
+          // reset, so the unused high bytes would carry over stale content
+          // from a previous block instead of being predictably zero (the
+          // same bug found and fixed in romulus_n_lwc.v's blk_in). The
+          // absorb masks above only ever read blk_byte[bi] for bi <
+          // eff_len, which lies within the words actually written here.
+          blk_in[127-32*{30'd0,wsel} -: 32] <= bswap32(pdi_data);
           if (wsel == pt_coll_words[1:0] - 2'd1) begin
             wsel <= 2'd0;
             perm_state <= state; rnd_idx <= 4'd0; perm_ret <= S_PT_PERM_DN;
@@ -633,7 +712,11 @@ module photonbeetle_lwc (
         S_PT_RHO: begin
           out_blk <= out_blk_next;
           owc <= 2'd0;
-          state[127:0] <= state[127:0] ^ pt_absorb_mask;
+          // Same rate-vs-capacity mix-up as S_AD_ABSORB, fixed the same
+          // way: absorb into state[255:128] (bytes 0..15), and the
+          // last-block XOR_const below is c1 alone, not a second
+          // (wrongly-targeted) copy of the mask's own last byte.
+          state[255:128] <= state[255:128] ^ pt_absorb_mask;
           pt_i <= pt_i + {11'd0, pt_eff_len};
           wsel <= 2'd0;
           // Latch this block's last-flag/word-count for S_PT_OUT, reached
@@ -642,7 +725,7 @@ module photonbeetle_lwc (
           pt_last_blk_r   <= pt_is_last;
           pt_coll_words_r <= pt_coll_words[1:0];
           if (pt_is_last)
-            state[7:0] <= state[7:0] ^ pt_absorb_mask[7:0] ^ {c1, 5'b0};
+            state[7:0] <= state[7:0] ^ {c1, 5'b0};
           fsm <= S_PT_OUT;
         end
         S_PT_OUT: if (do_ready) begin

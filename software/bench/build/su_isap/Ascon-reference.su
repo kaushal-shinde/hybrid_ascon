@@ -1,0 +1,7 @@
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/isap/Ascon-reference.c:15:6:load64	8	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/isap/Ascon-reference.c:24:6:store64	8	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/isap/Ascon-reference.c:32:6:Ascon_Initialize	8	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/isap/Ascon-reference.c:38:6:Ascon_AddBytes	16	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/isap/Ascon-reference.c:49:6:Ascon_OverwriteBytes	16	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/isap/Ascon-reference.c:60:6:Ascon_Permute_Nrounds	128	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/isap/Ascon-reference.c:97:6:Ascon_ExtractBytes	16	static

@@ -34,11 +34,14 @@ how thoroughly each core has actually been checked.
 ## What's verified vs. what's a transliteration
 
 Of the twelve cores in `verilog/`, three (Ascon-AEAD128 and both hybrids)
-are functionally verified via Vivado `xsim` against the C reference; one of
-the remaining nine (`tinyjambu_lwc.v`) is verified against the official NIST
-KAT vectors; the other eight are lint-clean in both Verilator and Vivado but
-**not** simulation-verified — each file's header says so, and
-`verilog/README.md` has the full per-file breakdown. `RESULTS.md` reports
+are functionally verified via Vivado `xsim` against the C reference; the
+other nine (`tinyjambu_lwc.v`, `xoodyak_lwc.v`, `giftcofb_lwc.v`,
+`grain128aead_lwc.v`, `romulus_n_lwc.v`, `sparkle_lwc.v`, `photonbeetle_lwc.v`,
+`elephant_lwc.v`, `isap_lwc.v`) are all verified against the official NIST
+KAT vectors — every core in this directory now has an actual simulation
+result behind it, not just a lint pass; `verilog/README.md` has the full
+per-file breakdown, including the 42 real RTL bugs the KAT runs found and
+fixed along the way. `RESULTS.md` reports
 Vivado/OpenROAD hardware numbers for all twelve together, with the depth of
 measurement (and hence how much to trust each number) called out per design
 throughout — read its §1 and §8 before treating any figure as a performance

@@ -22,11 +22,18 @@
 //   slim permutation = 7 steps, big permutation = 11 steps
 //
 // ENDIANNESS: the reference memcpy's byte strings straight into uint32_t
-// arrays, so its state words are LITTLE-endian views of the byte stream. The
-// LWC API delivers bytes big-endian-packed in each 32-bit bus word (byte 0 in
-// bits [31:24]). Every word crossing the bus is therefore byte-swapped, on
-// input and on output alike; internally this core works in the reference's
-// little-endian word domain so that the arithmetic matches the C exactly.
+// arrays, so its state words are LITTLE-endian views of the byte stream
+// (byte 0 in bits [7:0] of the word). The LWC bus uses that SAME
+// convention per word (confirmed empirically via KAT runs against
+// tinyjambu_lwc.v and others in this directory) -- so a bus word can be
+// used directly as a reference state word, with NO byte-swap in either
+// direction. An earlier draft of this file assumed the bus packs bytes
+// big-endian-per-word and added a compensating bswap() at every load,
+// store and comparison site; that assumption was wrong (the opposite
+// documentation error from romulus_n_lwc.v, which wrongly assumed no
+// swap was needed) and the swap actively broke every result until KAT
+// simulation caught it at the very first, simplest record (empty AD,
+// empty message) and removing it fixed the core.
 //
 // RATE WORD ORDER: the rate occupies branches 0..3, and the reference's
 // word-indexed rate buffer maps as in0->x0, in1->y0, in2->x1, in3->y1,
@@ -102,11 +109,6 @@ module sparkle_lwc (
   localparam [31:0] CONST_M3 = 32'h07000000;   // (3^4)<<24, full msg
 
   // ---------------------------------------------------------------- helpers
-  function [31:0] bswap;
-    input [31:0] v;
-    begin bswap = {v[7:0], v[15:8], v[23:16], v[31:24]}; end
-  endfunction
-
   // ELL(x) = ROT(x ^ (x<<16), 16), where ROT is a rotate RIGHT.
   function [31:0] ell;
     input [31:0] v;
@@ -288,9 +290,9 @@ module sparkle_lwc (
   assign do_data =
       (fsm == S_DO_PTHDR)  ? {(decrypt_r ? SEGT_PT : SEGT_CT), 1'b0, 1'b0,
                               1'b1, decrypt_r, 8'd0, pt_len} :
-      (fsm == S_PT_OUT)    ? bswap(ob[{owc, 5'b0} +: 32]) :
+      (fsm == S_PT_OUT)    ? ob[{owc, 5'b0} +: 32] :
       (fsm == S_DO_TAGHDR) ? {SEGT_TAG, 1'b0, 1'b0, 1'b1, 1'b1, 8'd0, 16'd16} :
-      (fsm == S_TAG_OUT)   ? bswap(tagw) :
+      (fsm == S_TAG_OUT)   ? tagw :
       (fsm == S_OUT_STATUS)? {(decrypt_r ? (tag_ok ? ST_SUCCESS : ST_FAILURE)
                                          : ST_SUCCESS), 28'd0} :
       32'd0;
@@ -319,10 +321,10 @@ module sparkle_lwc (
         S_SDI_HDR: if (sdi_valid) begin wcnt <= 2'd0; fsm <= S_SDI_KEY; end
         S_SDI_KEY: if (sdi_valid) begin
           case (wcnt)
-            2'd0: k0 <= bswap(sdi_data);
-            2'd1: k1 <= bswap(sdi_data);
-            2'd2: k2 <= bswap(sdi_data);
-            default: k3 <= bswap(sdi_data);
+            2'd0: k0 <= sdi_data;
+            2'd1: k1 <= sdi_data;
+            2'd2: k2 <= sdi_data;
+            default: k3 <= sdi_data;
           endcase
           wcnt <= wcnt + 2'd1;
           if (wcnt == 2'd3) begin key_loaded <= 1'b1; fsm <= S_IDLE; end
@@ -339,10 +341,10 @@ module sparkle_lwc (
         // Key goes straight into the capacity branches 4 and 5.
         S_PDI_NDATA: if (pdi_valid) begin
           case (ncnt)
-            3'd0: x0 <= bswap(pdi_data);  3'd1: y0 <= bswap(pdi_data);
-            3'd2: x1 <= bswap(pdi_data);  3'd3: y1 <= bswap(pdi_data);
-            3'd4: x2 <= bswap(pdi_data);  3'd5: y2 <= bswap(pdi_data);
-            3'd6: x3 <= bswap(pdi_data);  default: y3 <= bswap(pdi_data);
+            3'd0: x0 <= pdi_data;  3'd1: y0 <= pdi_data;
+            3'd2: x1 <= pdi_data;  3'd3: y1 <= pdi_data;
+            3'd4: x2 <= pdi_data;  3'd5: y2 <= pdi_data;
+            3'd6: x3 <= pdi_data;  default: y3 <= pdi_data;
           endcase
           ncnt <= ncnt + 3'd1;
           if (ncnt == 3'd7) begin
@@ -368,7 +370,7 @@ module sparkle_lwc (
           fsm    <= (pdi_data[15:0] == 16'd0) ? S_PDI_PHDR : S_AD_COLL;
         end
         S_AD_COLL: if (pdi_valid) begin
-          ib[{wc3, 5'b0} +: 32] <= bswap(pdi_data);
+          ib[{wc3, 5'b0} +: 32] <= pdi_data;
           if (wc3 == lastw) fsm <= S_AD_ABS;
           else              wc3 <= wc3 + 3'd1;
         end
@@ -394,7 +396,7 @@ module sparkle_lwc (
           fsm <= (pt_len == 16'd0) ? S_FINAL : S_PT_COLL;
 
         S_PT_COLL: if (pdi_valid) begin
-          ib[{wc3, 5'b0} +: 32] <= bswap(pdi_data);
+          ib[{wc3, 5'b0} +: 32] <= pdi_data;
           if (wc3 == lastw) fsm <= S_PT_ABS;
           else              wc3 <= wc3 + 3'd1;
         end
@@ -433,7 +435,7 @@ module sparkle_lwc (
 
         S_PDI_THDR: if (pdi_valid) begin wcnt <= 2'd0; fsm <= S_TAG_IN; end
         S_TAG_IN: if (pdi_valid) begin
-          tag_ok <= tag_ok & (bswap(pdi_data) == tagw);
+          tag_ok <= tag_ok & (pdi_data == tagw);
           wcnt   <= wcnt + 2'd1;
           if (wcnt == 2'd3) fsm <= S_OUT_STATUS;
         end

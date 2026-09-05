@@ -1,0 +1,2 @@
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/isap/crypto_aead.c:5:5:crypto_aead_encrypt	64	dynamic,bounded
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/isap/crypto_aead.c:29:5:crypto_aead_decrypt	96	dynamic,bounded

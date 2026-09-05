@@ -1,0 +1,62 @@
+{
+  "ascon": {
+    "static_stack_bytes": 232,
+    "n_functions": 9,
+    "entry_frame": 48
+  },
+  "hybrid_r128": {
+    "static_stack_bytes": 264,
+    "n_functions": 10,
+    "entry_frame": 48
+  },
+  "hybrid_r64": {
+    "static_stack_bytes": 264,
+    "n_functions": 10,
+    "entry_frame": 48
+  },
+  "tinyjambu": {
+    "static_stack_bytes": 280,
+    "n_functions": 10,
+    "entry_frame": 48
+  },
+  "xoodyak": {
+    "static_stack_bytes": 664,
+    "n_functions": 27,
+    "entry_frame": 48
+  },
+  "giftcofb": {
+    "static_stack_bytes": 400,
+    "n_functions": 15,
+    "entry_frame": 48
+  },
+  "grain": {
+    "static_stack_bytes": 1040,
+    "n_functions": 18,
+    "entry_frame": 48
+  },
+  "sparkle": {
+    "static_stack_bytes": 384,
+    "n_functions": 24,
+    "entry_frame": 48
+  },
+  "elephant": {
+    "static_stack_bytes": 648,
+    "n_functions": 20,
+    "entry_frame": 48
+  },
+  "isap": {
+    "static_stack_bytes": 584,
+    "n_functions": 17,
+    "entry_frame": 48
+  },
+  "photonbeetle": {
+    "static_stack_bytes": 520,
+    "n_functions": 19,
+    "entry_frame": 48
+  },
+  "romulus": {
+    "static_stack_bytes": 864,
+    "n_functions": 30,
+    "entry_frame": 48
+  }
+}

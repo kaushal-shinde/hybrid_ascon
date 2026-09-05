@@ -19,6 +19,12 @@ with open(os.path.join(HERE, "size_results.csv")) as f:
         label, text, data, bss = row
         sizes[label] = (int(text), int(data), int(bss))
 
+sections = {}
+with open(os.path.join(HERE, "section_results.csv")) as f:
+    for row in csv.reader(f):
+        label, dot_text, dot_rodata = row
+        sections[label] = (int(dot_text), int(dot_rodata))
+
 stack = json.load(open(os.path.join(HERE, "stack_results.json")))
 
 # display name, input rate (bytes absorbed per core op -- see notes.md),
@@ -42,6 +48,7 @@ SPEC = {
 rows = []
 for label, r in raw.items():
     text, data, bss = sizes[label]
+    dot_text, dot_rodata = sections[label]
     st = stack[label]
     name, rate, rounds = SPEC[label]
     rows.append({
@@ -52,11 +59,17 @@ for label, r in raw.items():
         "input_rate_bytes": rate,
         "rounds": rounds,
         "rom_bytes": text,
+        "rom_dot_text_bytes": dot_text,
+        "rom_dot_rodata_bytes": dot_rodata,
         "ram_bytes": data + bss,
         "stack_bytes": st["static_stack_bytes"],
         "latency_cycles": r["latency_cycles"],
         "cycles_per_byte": r["cycles_per_byte"],
         "throughput_MBps": r["MBps"],
+        "dec_latency_cycles": r["dec_latency_cycles"],
+        "dec_cycles_per_byte": r["dec_cycles_per_byte"],
+        "dec_throughput_MBps": r["dec_MBps"],
+        "dec_roundtrip_ok": r["dec_ok"],
     })
 
 # stable order matching the hardware report's designs-first-then-finalists
@@ -66,8 +79,9 @@ rows_by_label = dict(zip(raw.keys(), rows))
 ordered = [rows_by_label[l] for l in order]
 
 fields = ["design","key_bytes","npub_bytes","tag_bytes","input_rate_bytes","rounds",
-          "rom_bytes","ram_bytes","stack_bytes","latency_cycles","cycles_per_byte",
-          "throughput_MBps"]
+          "rom_bytes","rom_dot_text_bytes","rom_dot_rodata_bytes","ram_bytes","stack_bytes",
+          "latency_cycles","cycles_per_byte","throughput_MBps",
+          "dec_latency_cycles","dec_cycles_per_byte","dec_throughput_MBps","dec_roundtrip_ok"]
 with open(OUT, "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=fields)
     w.writeheader()
@@ -75,3 +89,20 @@ with open(OUT, "w", newline="") as f:
         w.writerow(row)
 
 print("wrote", OUT)
+
+# throughput curve: same display names as SPEC above, copied alongside
+# results.csv so it has one home next to the dataset it complements
+CURVE_OUT = "/home/nesec/Desktop/projects/ascon hybrid/software/curve_results.csv"
+name_by_label = {label: spec[0] for label, spec in SPEC.items()}
+with open(os.path.join(HERE, "curve_results.csv")) as f, \
+     open(CURVE_OUT, "w", newline="") as out:
+    r = csv.DictReader(f)
+    w = csv.DictWriter(out, fieldnames=["design", "size_bytes", "cycles_per_byte"])
+    w.writeheader()
+    for row in r:
+        w.writerow({
+            "design": name_by_label[row["label"]],
+            "size_bytes": row["size_bytes"],
+            "cycles_per_byte": row["cycles_per_byte"],
+        })
+print("wrote", CURVE_OUT)

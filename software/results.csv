@@ -1,13 +1,13 @@
-design,key_bytes,npub_bytes,tag_bytes,input_rate_bytes,rounds,rom_bytes,ram_bytes,stack_bytes,latency_cycles,cycles_per_byte,throughput_MBps
-Ascon-AEAD128,16,16,16,16,12 init/final + 8 per block,15386,552,232,1148.0,11.1958,223.27
-hybrid r=128,16,16,16,16,12 init/final + 8 per block,5077,560,264,624.0,7.1362,429.47
-hybrid r=64,16,16,16,8,12 init/final + 8 per block,4139,560,264,722.0,10.1289,308.03
-TinyJAMBU-128,16,12,8,4,1024 (key setup) + 640/1152 (frame),3659,576,280,3898.0,86.6001,35.57
-Xoodyak,16,16,16,16,"12 (fixed, every call)",9337,688,664,5918.0,83.3926,35.90
-GIFT-COFB,16,16,16,16,40 (GIFT-128),5603,576,400,57164.0,1204.4609,2.42
-Grain-128AEAD,16,12,8,1,320 (init) + 256 (key/acc load),8123,696,1040,85898.0,1493.2539,1.84
-SPARKLE,16,32,16,32,7 (slim) / 11 (big),10199,696,384,3710.0,25.1504,117.19
-Elephant (Dumbo),16,12,8,20,80 (Spongent-pi[160]),6792,1736,648,688602.0,14480.8135,0.20
-ISAP (ISAP-A-128A),16,16,16,8,sH=12 sB=1 sE=6 sK=12 (phase-dependent),6882,672,584,63286.0,121.2510,24.25
-PHOTON-Beetle,16,16,16,16,12 (PHOTON256),7512,728,520,384516.0,8273.2964,0.35
-Romulus (Romulus-N),16,16,16,16,40 (SKINNY-128-384+),9832,800,864,24528.0,792.3008,3.71
+design,key_bytes,npub_bytes,tag_bytes,input_rate_bytes,rounds,rom_bytes,rom_dot_text_bytes,rom_dot_rodata_bytes,ram_bytes,stack_bytes,latency_cycles,cycles_per_byte,throughput_MBps,dec_latency_cycles,dec_cycles_per_byte,dec_throughput_MBps,dec_roundtrip_ok
+Ascon-AEAD128,16,16,16,16,12 init/final + 8 per block,15569,13815,0,560,232,1354.0,14.9038,210.00,1282.0,13.4517,190.51,1
+hybrid r=128,16,16,16,16,12 init/final + 8 per block,5260,3335,12,568,264,620.0,7.1104,360.56,646.0,8.1050,374.29,1
+hybrid r=64,16,16,16,8,12 init/final + 8 per block,4322,2391,12,568,264,786.0,12.1064,248.39,812.0,10.4092,187.63,1
+TinyJAMBU-128,16,12,8,4,1024 (key setup) + 640/1152 (frame),3842,1671,0,584,280,3976.0,86.1489,32.47,4032.0,91.9155,31.38,1
+Xoodyak,16,16,16,16,"12 (fixed, every call)",9520,4007,752,696,664,6310.0,84.2627,35.27,5970.0,85.9067,30.31,1
+GIFT-COFB,16,16,16,16,40 (GIFT-128),5794,3447,40,584,400,51000.0,1054.1782,2.74,51002.0,1076.0493,2.73,1
+Grain-128AEAD,16,12,8,1,320 (init) + 256 (key/acc load),8306,4343,16,704,1040,83090.0,1448.1904,1.91,81412.0,1425.6572,1.94,1
+SPARKLE,16,32,16,32,7 (slim) / 11 (big),10382,5575,288,704,384,3652.0,24.6875,107.02,3688.0,24.6050,117.79,1
+Elephant (Dumbo),16,12,8,20,80 (Spongent-pi[160]),6975,2887,6,1744,648,648798.0,13743.9189,0.22,648450.0,13646.7788,0.21,1
+ISAP (ISAP-A-128A),16,16,16,8,sH=12 sB=1 sE=6 sK=12 (phase-dependent),7065,3127,279,680,584,68210.0,124.8633,23.28,68182.0,124.4038,22.84,1
+PHOTON-Beetle,16,16,16,16,12 (PHOTON256),7695,3415,194,736,520,373874.0,7935.7471,0.37,373876.0,7897.1846,0.37,1
+Romulus (Romulus-N),16,16,16,16,40 (SKINNY-128-384+),10095,3975,352,808,864,23694.0,742.2124,3.94,24688.0,749.4302,3.77,1

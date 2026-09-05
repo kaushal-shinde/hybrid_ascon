@@ -226,15 +226,50 @@ module giftcofb_lwc (
     begin xor_topbar = {x[127:64]^off, x[63:0]}; end
   endfunction
 
+  // BYTE ORDER: every 128-bit block here (blkbuf, Y, offset...) represents
+  // byte i at bits [127-8i -: 8] -- byte 0 in the MSB, matching how
+  // gift128.c's P[]/K[] byte arrays pack into its big-endian S[]/W[] words
+  // (S[i] = P[4i]<<24 | P[4i+1]<<16 | P[4i+2]<<8 | P[4i+3]) and how pad128
+  // above already indexes bytes ("127-8*n"). The LWC bus, though, delivers
+  // each word little-endian (byte 0 in pdi_data[7:0] -- the convention
+  // tinyjambu_lwc.v and xoodyak_lwc.v both use and that their KAT runs
+  // confirmed). Loading bus words into gs[]/gw[]/blkbuf *without*
+  // correcting for that mismatch put every byte in the wrong lane inside
+  // its own 32-bit group -- right group, wrong order within it -- which
+  // gave a totally different (but plausible-looking) GIFT-128 output from
+  // the very first cipher call, the init encryption of the nonce. Found by
+  // comparing that first call's result against the C reference directly,
+  // not by lint or by anything visible in a single word-level trace.
+  function [31:0] bswap32;
+    input [31:0] w;
+    begin bswap32 = {w[7:0], w[15:8], w[23:16], w[31:24]}; end
+  endfunction
+
   // yosys's Verilog-2005 frontend rejects a part-select directly on a
   // function call's return value (`f(...)[a:b]`), unlike Verilator/Vivado
   // which both accept it; these three wires hold each call site's full
   // 128-bit result once so the FSM below can slice from a plain signal
   // instead, for yosys/OpenROAD synthesis compatibility.
-  wire [127:0] fmix_full = xor_topbar(gfun(Y) ^ pad128(blkbuf,chunk_len), dbl_offset);
+  // BUG (found via KAT on the first AD longer than one block, alen=17):
+  // S_AD_FOFFS already writes offset<=dbl_offset (the reference's
+  // double_half_block() call) one cycle before this is used, so by the
+  // time fmix_full is evaluated the `offset` register already holds the
+  // doubled value -- using the `dbl_offset` *wire* here re-doubles it off
+  // that already-doubled register, quadrupling instead of doubling. Only
+  // the plain `offset` register is correct here.
+  wire [127:0] fmix_full = xor_topbar(gfun(Y) ^ pad128(blkbuf,chunk_len), offset);
   wire [127:0] lmix_full = xor_topbar(gfun(Y) ^ pad128(blkbuf,chunk_len),
                                        msg_empty ? trp_offset : offset);
-  wire [127:0] ptmix_full = xor_topbar(gfun(Y) ^ pad128(cbuf,chunk_len), offset);
+  // BUG (found via KAT on the first non-empty message, mlen=1): pho1 in
+  // the reference always absorbs the *plaintext* (pho's M, not its derived
+  // C), and phoprime likewise absorbs its recovered M -- the SAME quantity
+  // either way, but only decrypt actually has that quantity sitting in
+  // cbuf (cbuf=Y^ciphertext=recovered plaintext there). For encrypt, cbuf
+  // holds Y^plaintext=ciphertext instead, so padding cbuf silently
+  // absorbed the ciphertext byte instead of the plaintext byte -- the same
+  // class of encrypt/decrypt absorption asymmetry already found and fixed
+  // in xoodyak_lwc.v's S_PT_OUT.
+  wire [127:0] ptmix_full = xor_topbar(gfun(Y) ^ pad128(decrypt_r ? cbuf : blkbuf, chunk_len), offset);
 
   // ------------------------------------------------------------------ FSM -
   localparam [5:0]
@@ -261,25 +296,43 @@ module giftcofb_lwc (
 
   reg [5:0] fsm;
 
+  // S_AD_WORD asserting ready unconditionally would let a well-formed
+  // sender's *next* PDI word get silently eaten during the one cycle
+  // S_AD_WORD spends falling straight through to its "else" branch on an
+  // empty (adlen=0) AD phase -- need_words=0 there, so {wcnt<need_words} is
+  // false from the very first cycle and no word is actually consumed. Same
+  // bug class as xoodyak_lwc.v's S_AD_WORD/S_PT_WORD (found there first via
+  // KAT simulation, checked for here proactively). S_PT_WORD does not need
+  // the same guard: S_DO_PTHDR already skips straight to S_DO_TAGHDR on an
+  // empty message, so S_PT_WORD itself is only ever entered once pt_len>0
+  // is already established and need_words is always >=1.
   assign pdi_ready = (fsm == S_IDLE)     || (fsm == S_PDI_OP)   ||
                      (fsm == S_PDI_NHDR)|| (fsm == S_PDI_NDATA)||
-                     (fsm == S_PDI_AHDR)|| (fsm == S_AD_WORD)  ||
+                     (fsm == S_PDI_AHDR)||
+                     (fsm == S_AD_WORD && {1'b0,wcnt} < need_words) ||
                      (fsm == S_PDI_PHDR)|| (fsm == S_PT_WORD)  ||
                      (fsm == S_PDI_THDR)|| (fsm == S_TAG_WORD);
   assign sdi_ready = (fsm == S_IDLE) || (fsm == S_SDI_HDR) || (fsm == S_SDI_KEY);
 
+  // S_DO_TAGHDR/S_OUT_TAG run for both directions (the tag is always needed
+  // internally so decrypt can compare it) but only encrypt actually puts it
+  // on the DO bus -- same bug class as xoodyak_lwc.v's S_DO_TAGHDR/S_OUT_TAG
+  // (found there via KAT simulation, checked for here proactively).
   assign do_valid = (fsm == S_DO_PTHDR) || (fsm == S_PT_OUT) ||
-                    (fsm == S_DO_TAGHDR) || (fsm == S_OUT_TAG) ||
+                    ((fsm == S_DO_TAGHDR) && !decrypt_r) ||
+                    ((fsm == S_OUT_TAG) && !decrypt_r) ||
                     (fsm == S_OUT_STATUS);
   assign do_last  = (fsm == S_OUT_STATUS);
   assign do_data  =
       (fsm == S_DO_PTHDR)  ? {(decrypt_r ? SEGT_PT : SEGT_CT), 1'b0, 1'b0,
                               1'b1, decrypt_r, 8'd0, pt_len} :
-      (fsm == S_PT_OUT)    ? (wcnt==2'd0 ? cbuf[127:96] : wcnt==2'd1 ? cbuf[95:64] :
-                              wcnt==2'd2 ? cbuf[63:32]  : cbuf[31:0]) :
+      // bswap32 here mirrors the load-side fix above: cbuf/Y are internally
+      // byte0-in-MSB (matching gift128.c), the bus wants byte0-in-LSB.
+      (fsm == S_PT_OUT)    ? (wcnt==2'd0 ? bswap32(cbuf[127:96]) : wcnt==2'd1 ? bswap32(cbuf[95:64]) :
+                              wcnt==2'd2 ? bswap32(cbuf[63:32])  : bswap32(cbuf[31:0])) :
       (fsm == S_DO_TAGHDR) ? {SEGT_TAG, 1'b0, 1'b0, 1'b1, 1'b1, 8'd0, 16'd16} :
-      (fsm == S_OUT_TAG)   ? (tag_wcnt==2'd0 ? Y[127:96] : tag_wcnt==2'd1 ? Y[95:64] :
-                              tag_wcnt==2'd2 ? Y[63:32]  : Y[31:0]) :
+      (fsm == S_OUT_TAG)   ? (tag_wcnt==2'd0 ? bswap32(Y[127:96]) : tag_wcnt==2'd1 ? bswap32(Y[95:64]) :
+                              tag_wcnt==2'd2 ? bswap32(Y[63:32])  : bswap32(Y[31:0])) :
       (fsm == S_OUT_STATUS)? {(decrypt_r ? (tag_ok?ST_SUCCESS:ST_FAILURE)
                                           : ST_SUCCESS), 28'd0} :
       32'd0;
@@ -305,8 +358,8 @@ module giftcofb_lwc (
         S_SDI_HDR: if (sdi_valid) begin wcnt<=2'd0; fsm<=S_SDI_KEY; end
         S_SDI_KEY: if (sdi_valid) begin
           case (wcnt)
-            2'd0: k0<=sdi_data; 2'd1: k1<=sdi_data;
-            2'd2: k2<=sdi_data; default: k3<=sdi_data;
+            2'd0: k0<=bswap32(sdi_data); 2'd1: k1<=bswap32(sdi_data);
+            2'd2: k2<=bswap32(sdi_data); default: k3<=bswap32(sdi_data);
           endcase
           if (wcnt==2'd3) fsm<=S_IDLE; else wcnt<=wcnt+2'd1;
         end
@@ -319,11 +372,11 @@ module giftcofb_lwc (
         S_PDI_NHDR: if (pdi_valid) begin wcnt<=2'd0; fsm<=S_PDI_NDATA; end
         S_PDI_NDATA: if (pdi_valid) begin
           case (wcnt)
-            2'd0: npub0<=pdi_data; 2'd1: npub1<=pdi_data;
-            2'd2: npub2<=pdi_data; default: npub3<=pdi_data;
+            2'd0: npub0<=bswap32(pdi_data); 2'd1: npub1<=bswap32(pdi_data);
+            2'd2: npub2<=bswap32(pdi_data); default: npub3<=bswap32(pdi_data);
           endcase
           if (wcnt==2'd3) begin
-            gs[0]<=npub0; gs[1]<=npub1; gs[2]<=npub2; gs[3]<=pdi_data;
+            gs[0]<=npub0; gs[1]<=npub1; gs[2]<=npub2; gs[3]<=bswap32(pdi_data);
             gw[0]<=k0[31:16]; gw[1]<=k0[15:0]; gw[2]<=k1[31:16]; gw[3]<=k1[15:0];
             gw[4]<=k2[31:16]; gw[5]<=k2[15:0]; gw[6]<=k3[31:16]; gw[7]<=k3[15:0];
             ground<=6'd0; ret<=S_INIT_OFF; fsm<=S_GIFT_RUN;
@@ -357,8 +410,8 @@ module giftcofb_lwc (
           if ({1'b0,wcnt} < need_words) begin
             if (pdi_valid) begin
               case (wcnt)
-                2'd0: blkbuf[127:96]<=pdi_data; 2'd1: blkbuf[95:64]<=pdi_data;
-                2'd2: blkbuf[63:32]<=pdi_data;  default: blkbuf[31:0]<=pdi_data;
+                2'd0: blkbuf[127:96]<=bswap32(pdi_data); 2'd1: blkbuf[95:64]<=bswap32(pdi_data);
+                2'd2: blkbuf[63:32]<=bswap32(pdi_data);  default: blkbuf[31:0]<=bswap32(pdi_data);
               endcase
               wcnt <= wcnt + 2'd1;
               if ({1'b0,wcnt} + 3'd1 == need_words)
@@ -369,11 +422,21 @@ module giftcofb_lwc (
 
         // Full-block path: double(), pho1+xor_topbar, GIFT call, loop.
         S_AD_FOFFS: begin offset <= dbl_offset; fsm <= S_AD_FMIX; end
+        // GIFT-128's key schedule (gw[]) mutates every one of the 40
+        // rounds -- the reference re-derives W[] fresh from K[] at the top
+        // of *every* giftb128() call, so every cipher call here past the
+        // very first (init) one needs the same reset, or it silently keeps
+        // running with whatever drifted schedule the previous call's last
+        // round left behind. Missing on all three of this file's non-init
+        // GIFT calls until KAT simulation caught it via the AD final block
+        // (the first call after init) computing a plausible but wrong tag.
         S_AD_FMIX: begin
           gs[0] <= fmix_full[127:96];
           gs[1] <= fmix_full[95:64];
           gs[2] <= fmix_full[63:32];
           gs[3] <= fmix_full[31:0];
+          gw[0]<=k0[31:16]; gw[1]<=k0[15:0]; gw[2]<=k1[31:16]; gw[3]<=k1[15:0];
+          gw[4]<=k2[31:16]; gw[5]<=k2[15:0]; gw[6]<=k3[31:16]; gw[7]<=k3[15:0];
           ground<=6'd0; ret<=S_AD_FDONE; fsm<=S_GIFT_RUN;
         end
         S_AD_FDONE: begin
@@ -388,7 +451,14 @@ module giftcofb_lwc (
         S_PDI_PHDR: if (pdi_valid) begin
           pt_len <= pdi_data[15:0];
           msg_empty <= (pdi_data[15:0]==16'd0);
-          ad_final_partial <= (chunk_len[1:0]!=2'd0) || ad_was_empty;
+          // BUG (found via KAT on the first non-empty-AD record, alen=4):
+          // this tested chunk_len[1:0] (whether the chunk is a multiple of
+          // 4 *words*) when the reference's actual test is `alen%16!=0` --
+          // whether the final AD block is a full 16-byte block at all. A
+          // 4-byte AD chunk has chunk_len[1:0]==0 (4 is a multiple of 4)
+          // and was wrongly read as "not partial", skipping a triple() the
+          // reference always applies for any final block under 16 bytes.
+          ad_final_partial <= (chunk_len != 5'd16) || ad_was_empty;
           fsm <= S_AD_LOFFS1;
         end
         S_AD_LOFFS1: begin offset <= trp_offset; fsm <= S_AD_LOFFS2; end
@@ -408,6 +478,8 @@ module giftcofb_lwc (
           gs[1] <= lmix_full[95:64];
           gs[2] <= lmix_full[63:32];
           gs[3] <= lmix_full[31:0];
+          gw[0]<=k0[31:16]; gw[1]<=k0[15:0]; gw[2]<=k1[31:16]; gw[3]<=k1[15:0];
+          gw[4]<=k2[31:16]; gw[5]<=k2[15:0]; gw[6]<=k3[31:16]; gw[7]<=k3[15:0];
           ground<=6'd0; ret<=S_AD_LDONE; fsm<=S_GIFT_RUN;
         end
         S_AD_LDONE: begin
@@ -428,8 +500,8 @@ module giftcofb_lwc (
         end
         S_PT_WORD: if (pdi_valid) begin
           case (wcnt)
-            2'd0: blkbuf[127:96]<=pdi_data; 2'd1: blkbuf[95:64]<=pdi_data;
-            2'd2: blkbuf[63:32]<=pdi_data;  default: blkbuf[31:0]<=pdi_data;
+            2'd0: blkbuf[127:96]<=bswap32(pdi_data); 2'd1: blkbuf[95:64]<=bswap32(pdi_data);
+            2'd2: blkbuf[63:32]<=bswap32(pdi_data);  default: blkbuf[31:0]<=bswap32(pdi_data);
           endcase
           wcnt <= wcnt + 2'd1;
           if ({1'b0,wcnt} + 3'd1 == need_words) fsm <= S_PT_XOR;
@@ -442,16 +514,26 @@ module giftcofb_lwc (
           wcnt <= 2'd0;
           fsm <= S_PT_OUT;
         end
+        // BUG (found via KAT on the first non-empty message, mlen=1): this
+        // unconditionally looped wcnt 0->3, always emitting a full 4 DO
+        // words per chunk regardless of chunk_len -- correct for a full
+        // 16-byte chunk, but for the 1-byte final chunk here it should
+        // emit exactly ceil(1/4)=1 word (need_words), not 4. The extra
+        // words desynchronized every DO word after this point in the
+        // transaction. Mirrors need_words already used on the input side
+        // (S_AD_WORD/S_PT_WORD) -- the output side needed the same bound.
         S_PT_OUT: if (do_ready) begin
           wcnt <= wcnt + 2'd1;
-          if (wcnt == 2'd3) fsm <= S_PT_OFFS1;
+          if ({1'b0,wcnt} + 3'd1 == need_words) fsm <= S_PT_OFFS1;
         end
         S_PT_OFFS1: begin
           offset <= pt_full_block ? dbl_offset : trp_offset;
           fsm <= S_PT_OFFS2;
         end
         S_PT_OFFS2: begin
-          if (!pt_full_block && chunk_len[1:0]!=2'd0) offset <= offset ^ dbl_offset;
+          // Same class of bug as ad_final_partial above: this must test
+          // against a full 16-byte block, not chunk_len's low 2 bits.
+          if (!pt_full_block && chunk_len != 5'd16) offset <= offset ^ dbl_offset;
           fsm <= S_PT_MIX;
         end
         S_PT_MIX: begin
@@ -459,6 +541,8 @@ module giftcofb_lwc (
           gs[1] <= ptmix_full[95:64];
           gs[2] <= ptmix_full[63:32];
           gs[3] <= ptmix_full[31:0];
+          gw[0]<=k0[31:16]; gw[1]<=k0[15:0]; gw[2]<=k1[31:16]; gw[3]<=k1[15:0];
+          gw[4]<=k2[31:16]; gw[5]<=k2[15:0]; gw[6]<=k3[31:16]; gw[7]<=k3[15:0];
           ground<=6'd0; ret<=S_PT_DONE; fsm<=S_GIFT_RUN;
         end
         S_PT_DONE: begin
@@ -476,11 +560,11 @@ module giftcofb_lwc (
         S_PDI_THDR: if (pdi_valid) begin tag_wcnt<=2'd0; fsm<=S_TAG_WORD; end
         S_TAG_WORD: if (pdi_valid) begin
           case (tag_wcnt)
-            2'd0: tag_ok <= (pdi_data==Y[127:96]);
-            2'd1: tag_ok <= tag_ok & (pdi_data==Y[95:64]);
-            2'd2: tag_ok <= tag_ok & (pdi_data==Y[63:32]);
+            2'd0: tag_ok <= (bswap32(pdi_data)==Y[127:96]);
+            2'd1: tag_ok <= tag_ok & (bswap32(pdi_data)==Y[95:64]);
+            2'd2: tag_ok <= tag_ok & (bswap32(pdi_data)==Y[63:32]);
             default: begin
-              tag_ok <= tag_ok & (pdi_data==Y[31:0]);
+              tag_ok <= tag_ok & (bswap32(pdi_data)==Y[31:0]);
               fsm <= S_OUT_STATUS;
             end
           endcase

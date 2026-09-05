@@ -1,0 +1,5 @@
+/home/nesec/Desktop/projects/ascon hybrid/ascon-siphash/asconsip64.c:70:6:asconsip64_permutation	8	static
+/home/nesec/Desktop/projects/ascon hybrid/ascon-siphash/asconsip64.c:92:13:asconsip64_init	32	static
+/home/nesec/Desktop/projects/ascon hybrid/ascon-siphash/asconsip64.c:103:13:asconsip64_absorb_ad	48	static
+/home/nesec/Desktop/projects/ascon hybrid/ascon-siphash/asconsip64.c:119:5:asconsip64_aead_encrypt	160	static
+/home/nesec/Desktop/projects/ascon hybrid/ascon-siphash/asconsip64.c:161:5:asconsip64_aead_decrypt	176	static

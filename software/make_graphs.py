@@ -21,6 +21,7 @@ from matplotlib.patches import Patch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CSV = os.path.join(HERE, "results.csv")
+CURVE_CSV = os.path.join(HERE, "curve_results.csv")
 
 ROM_C = "#5b3fa0"    # muted violet -- code/ROM-domain charts
 SPEED_C = "#1a8a72"  # muted teal   -- speed-domain charts
@@ -134,6 +135,89 @@ def scatter(df):
     print("wrote 01_rom_vs_throughput.png")
 
 
+# 12 hand-picked, maximally-separated hues (no two blues/greens/reds close
+# enough to confuse at a glance -- an earlier version of this palette put
+# TinyJAMBU/Elephant/Romulus in three near-identical steel-blues) -- based
+# on Tableau's categorical palette, reordered for max adjacent contrast.
+PALETTE = [
+    "#4E79A7", "#F28E2B", "#59A14F", "#E15759", "#B07AA1", "#EDC948",
+    "#76B7B2", "#FF9DA7", "#9C755F", "#5B3FA0", "#D37295", "#8A8A00",
+]
+
+
+def throughput_curve(curve_df):
+    """cycles/byte vs. message size -- separates fixed per-call overhead
+    from steady-state per-byte cost, the thing a single 4096B data point
+    can't show (a design can look fast at 4096B and still be dominated by
+    setup cost at protocol-packet sizes, or vice versa)."""
+    fig, ax = plt.subplots(figsize=(9.5, 6.4), dpi=300)
+    designs = curve_df["design"].unique()
+    for i, name in enumerate(designs):
+        d = curve_df[curve_df["design"] == name].sort_values("size_bytes")
+        ax.plot(d["size_bytes"], d["cycles_per_byte"], marker="o", markersize=4,
+                linewidth=1.6, color=PALETTE[i % len(PALETTE)], label=name, zorder=3)
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("message size, bytes (log scale)")
+    ax.set_ylabel("cycles / byte (log scale)")
+    ax.grid(linewidth=0.6, zorder=0)
+    ax.set_axisbelow(True)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+    ax.tick_params(length=0)
+    ax.legend(fontsize=8, ncol=2, loc="upper right", frameon=False)
+
+    fig.suptitle("Throughput curve: fixed overhead vs. steady-state cost",
+                 fontsize=15, fontweight="bold", x=0.02, ha="left", y=0.99)
+    ax.set_title("encrypt-only, best-of-200 per point, 16/64/256/1024/4096B messages, 0B AD -- see notes.md",
+                 fontsize=9.5, color="#555555", loc="left", pad=10)
+
+    fig.tight_layout(rect=[0, 0, 1, 0.94])
+    fig.savefig(os.path.join(HERE, "07_throughput_curve.png"))
+    plt.close(fig)
+    print("wrote 07_throughput_curve.png")
+
+
+def encrypt_vs_decrypt(df):
+    """Paired hbar: encrypt vs. decrypt cycles/byte, same 4096B measurement
+    methodology both directions."""
+    d = df.sort_values("cycles_per_byte", ascending=True).reset_index(drop=True)
+    fig, ax = plt.subplots(figsize=(9.5, 6.4), dpi=300)
+    y = list(range(len(d)))
+    h = 0.36
+    ax.barh([v + h/2 for v in y], d["cycles_per_byte"], height=h,
+            color=SPEED_C, alpha=0.92, zorder=3, label="encrypt")
+    ax.barh([v - h/2 for v in y], d["dec_cycles_per_byte"], height=h,
+            color="#c9622b", alpha=0.92, zorder=3, label="decrypt")
+
+    ax.set_xscale("log")
+    ax.set_yticks(y)
+    ax.set_yticklabels(d["design"], fontsize=10)
+    ax.invert_yaxis()
+    ax.set_xlabel("cycles / byte (log scale)")
+    ax.grid(axis="x", linewidth=0.6, zorder=0)
+    ax.set_axisbelow(True)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+    ax.tick_params(length=0)
+    ax.legend(fontsize=10, loc="lower right", frameon=False)
+
+    not_ok = d[d["dec_roundtrip_ok"] == 0]["design"].tolist()
+    subtitle = "4096B message, 0B AD, native x86_64 -- see notes.md"
+    if not_ok:
+        subtitle += f" -- decrypt round-trip check FAILED for: {', '.join(not_ok)}"
+
+    fig.suptitle("Encrypt vs. decrypt, cycles/byte",
+                 fontsize=15, fontweight="bold", x=0.02, ha="left", y=0.99)
+    ax.set_title(subtitle, fontsize=9.5, color="#555555", loc="left", pad=10)
+
+    fig.tight_layout(rect=[0, 0, 1, 0.94])
+    fig.savefig(os.path.join(HERE, "08_encrypt_vs_decrypt.png"))
+    plt.close(fig)
+    print("wrote 08_encrypt_vs_decrypt.png")
+
+
 if __name__ == "__main__":
     df = pd.read_csv(CSV)
 
@@ -153,5 +237,10 @@ if __name__ == "__main__":
     hbar(df, "06_stack.png", "Stack usage",
          "static worst-case call-chain depth from GCC -fstack-usage + call-graph analysis, see notes.md",
          ROM_C, "stack_bytes", " B", ascending=True, fmt="{:.0f}")
+
+    if os.path.exists(CURVE_CSV):
+        throughput_curve(pd.read_csv(CURVE_CSV))
+    if "dec_cycles_per_byte" in df.columns:
+        encrypt_vs_decrypt(df)
 
     print("done")

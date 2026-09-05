@@ -28,11 +28,13 @@
 // (S[0] lands in the TOP byte of the 64-bit word) -- the opposite convention
 // from ascon_aead128.v's own "little-endian" comment, because that is a
 // different, self-contained reference file with its own loader, not the
-// official NIST aead.c. Conveniently, MSB-first-per-byte is also exactly how
-// the LWC PDI bus delivers a word (pdi_data[31:24] = first byte), so building
-// each internal 64-bit lane by straight concatenation of arriving PDI bytes
-// (no byte-swap!) already produces the right bit pattern -- unlike every
-// other finalist core in this directory, which needed an explicit bswap.
+// official NIST aead.c. The LWC bus's own convention is byte 0 in bits
+// [7:0] of the word (confirmed empirically via KAT runs against
+// tinyjambu_lwc.v and others in this directory), the OPPOSITE of what an
+// earlier draft of this comment claimed -- so every internal 64-bit lane
+// DOES need an explicit `bswap32` at every load, output and comparison
+// site after all, the same class of error found (in one direction or the
+// other) in romulus_n_lwc.v, sparkle_lwc.v and photonbeetle_lwc.v.
 //
 // IsapRk (the bit-serial re-keying primitive) is the one genuinely unusual
 // part of ISAP: to derive a sub-key it Init()s+p^sK once, then absorbs the
@@ -99,6 +101,13 @@ module isap_lwc (
   localparam [3:0] OP_DEC     = 4'b0011;
   localparam [3:0] ST_SUCCESS = 4'b1110, ST_FAILURE = 4'b1111;
   localparam [3:0] SEGT_PT    = 4'h4,    SEGT_CT    = 4'h5, SEGT_TAG = 4'h8;
+
+  // See the BYTE ORDER note in the file header: every bus word needs this
+  // applied on the way in, and on the way out.
+  function [31:0] bswap32;
+    input [31:0] w;
+    begin bswap32 = {w[7:0], w[15:8], w[23:16], w[31:24]}; end
+  endfunction
 
   // ---------------------------------------------------------- Ascon round
   // Verbatim from ascon_aead128.v: same state packing {x0,x1,x2,x3,x4} in
@@ -196,7 +205,8 @@ module isap_lwc (
   reg         decrypt_r, tag_ok;
   reg [5:0]   ad_resume, pt_resume;   // where to go after an AD/PT-phase permute
 
-  // current byte from the word register, MSB-first (matches PDI convention)
+  // current byte from the word register, MSB-first (cur_word is already
+  // bswap32'd on load, so this indexing now matches stream order)
   wire [7:0] cur_byte = (byte_sel == 2'd0) ? cur_word[31:24] :
                         (byte_sel == 2'd1) ? cur_word[23:16] :
                         (byte_sel == 2'd2) ? cur_word[15:8]  : cur_word[7:0];
@@ -283,9 +293,9 @@ module isap_lwc (
   assign do_data =
       (fsm == S_DO_PTHDR)  ? {(decrypt_r ? SEGT_PT : SEGT_CT), 1'b0, 1'b0,
                               1'b1, decrypt_r, 8'd0, pt_len} :
-      (fsm == S_PT_OUT)    ? outword :
+      (fsm == S_PT_OUT)    ? bswap32(outword) :
       (fsm == S_DO_TAGHDR) ? {SEGT_TAG, 1'b0, 1'b0, 1'b1, 1'b1, 8'd0, 16'd16} :
-      (fsm == S_TAG_OUT)   ? tag_word :
+      (fsm == S_TAG_OUT)   ? bswap32(tag_word) :
       (fsm == S_OUT_STATUS)? {(decrypt_r ? (tag_ok ? ST_SUCCESS : ST_FAILURE)
                                          : ST_SUCCESS), 28'd0} :
       32'd0;
@@ -309,7 +319,7 @@ module isap_lwc (
         end
         S_SDI_HDR: if (sdi_valid) begin wcnt <= 2'd0; fsm <= S_SDI_KEY; end
         S_SDI_KEY: if (sdi_valid) begin
-          key_r <= {key_r[95:0], sdi_data};      // straight concat, MSB-first
+          key_r <= {key_r[95:0], bswap32(sdi_data)};
           wcnt  <= wcnt + 2'd1;
           if (wcnt == 2'd3) fsm <= S_IDLE;
         end
@@ -321,11 +331,16 @@ module isap_lwc (
         end
         S_PDI_NHDR: if (pdi_valid) begin wcnt <= 2'd0; fsm <= S_PDI_NDATA; end
         S_PDI_NDATA: if (pdi_valid) begin
-          npub_r <= {npub_r[95:0], pdi_data};
+          // npub_r <= ... below only takes effect NEXT cycle -- reading
+          // npub_r directly here for the mac_state init would read its
+          // OLD value and silently drop this, the 4th and last, nonce
+          // word (the same bug found and fixed in photonbeetle_lwc.v).
+          // Use the same right-hand-side expression instead.
+          npub_r <= {npub_r[95:0], bswap32(pdi_data)};
           wcnt   <= wcnt + 2'd1;
           if (wcnt == 2'd3) begin
             // mac_state init: {Npub(16B), IV_A(8B), 0-pad(16B)}, then p^12.
-            perm_state <= {npub_r, IV_A, 128'd0};
+            perm_state <= {npub_r[95:0], bswap32(pdi_data), IV_A, 128'd0};
             rc_idx <= 4'd0; rounds_left <= 5'd12; perm_ret <= S_MACINIT_DN;
             fsm <= S_PERM_RUN;
           end
@@ -342,6 +357,18 @@ module isap_lwc (
 
         S_MACINIT_DN: begin
           mac_state <= perm_state;
+          // bcnt is reset here, at the START of every transaction, rather
+          // than relying only on the mid-transaction resets in
+          // S_AD_PAD_DONE / S_RK_DONE: an empty-AD transaction (ad_len==0)
+          // reads bcnt in S_AD_PAD BEFORE either of those runs, so without
+          // this it silently inherits whatever the PREVIOUS transaction
+          // left bcnt at -- invisible whenever that was already 0 (e.g.
+          // following an empty message), and wrong by exactly the byte
+          // count of the previous transaction's message otherwise, which
+          // is what a message-bearing encrypt followed immediately by its
+          // own decrypt (or vice versa) hits on the very first non-empty
+          // message in the KAT grid.
+          bcnt <= 3'd0;
           fsm <= S_PDI_AHDR;
         end
 
@@ -352,7 +379,7 @@ module isap_lwc (
           fsm <= (pdi_data[15:0] == 16'd0) ? S_AD_PAD : S_AD_WORD;
         end
         S_AD_WORD: if (pdi_valid) begin
-          cur_word <= pdi_data;
+          cur_word <= bswap32(pdi_data);
           byte_sel <= 2'd0;
           fsm <= S_AD_BYTE;
         end
@@ -435,7 +462,12 @@ module isap_lwc (
             // last 16 bytes (x3||x4) with Npub.
             enc_state <= {perm_state[319:128], npub_r};
             pt_i <= 16'd0; byte_sel <= 2'd0; bcnt <= 3'd0;
-            fsm <= S_PT_WORD;
+            // An empty message never sends a PT-data word, so S_PT_WORD
+            // (which waits on pdi_valid) would hang forever -- skip
+            // straight to the ciphertext-phase padding, the same way the
+            // AD phase skips its own byte loop via S_AD_PAD when ad_len
+            // is 0.
+            fsm <= (pt_len == 16'd0) ? S_C_PAD : S_PT_WORD;
           end else begin
             // Ka*: squeeze the top 16 bytes only; mac_state is untouched.
             ka_star <= perm_state[319:192];
@@ -445,7 +477,7 @@ module isap_lwc (
 
         // -------------------------------------------------- message loop
         S_PT_WORD: if (pdi_valid) begin
-          cur_word <= pdi_data;
+          cur_word <= bswap32(pdi_data);
           byte_sel <= 2'd0;
           fsm <= S_PT_KSPERM;
         end
@@ -520,7 +552,7 @@ module isap_lwc (
 
         S_PDI_THDR: if (pdi_valid) begin wcnt <= 2'd0; fsm <= S_TAG_IN; end
         S_TAG_IN: if (pdi_valid) begin
-          tag_ok <= tag_ok & (pdi_data == tag_word);
+          tag_ok <= tag_ok & (bswap32(pdi_data) == tag_word);
           wcnt   <= wcnt + 2'd1;
           if (wcnt == 2'd3) fsm <= S_OUT_STATUS;
         end

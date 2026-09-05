@@ -39,9 +39,11 @@
 //   - message encryption/decryption at block index i (i < nblocks_m), using
 //     an LFSR-mask pair (current_mask, next_mask) framing a keystream
 //     permutation call on {Npub, zero-pad};
-//   - a running tag accumulator, updated at index i from the CIPHERTEXT (or,
-//     when decrypting, the just-recovered PLAINTEXT) of the PREVIOUS block
-//     i-1 (get_c_block), using the mask pair (previous_mask, next_mask);
+//   - a running tag accumulator, updated at index i from the CIPHERTEXT of
+//     the PREVIOUS block i-1 (get_c_block) -- the reference reads the
+//     ciphertext here in BOTH directions, not the recovered plaintext on
+//     decrypt; see UNIFIED KEYSTREAM XOR below -- using the mask pair
+//     (previous_mask, next_mask);
 //   - the same tag accumulator, updated at index i from the AD block ONE
 //     AHEAD, i+1 (get_ad_block), using next_mask alone.
 //   The three 32-bit mask registers rotate every iteration
@@ -54,9 +56,19 @@
 // UNIFIED KEYSTREAM XOR: message encryption and decryption use the identical
 // formula (out = keystream ^ in), so this core computes one "out_block" per
 // message-block iteration regardless of direction -- ciphertext when
-// encrypting, recovered plaintext when decrypting -- and that is exactly the
-// value get_c_block's lookback needs from out_mem, matching the reference's
-// own "encrypt ? c : m" selection without a separate code path.
+// encrypting, recovered plaintext when decrypting -- which is exactly the
+// value the DO stream needs to emit either way. It is NOT, however, what
+// get_c_block's lookback wants: tracing the reference's own
+// crypto_aead_impl/crypto_aead_decrypt shows its "encrypt ? c : m"
+// selector reads plain ciphertext on both branches (the decrypt branch's
+// `m` is bound by crypto_aead_decrypt to its OWN `c` argument, the
+// ciphertext input, not the plaintext output buffer) -- an earlier draft
+// of this file misread that cross-wired argument naming and fed
+// out_block into out_mem unconditionally, silently absorbing the
+// recovered plaintext into the decrypt-side tag instead of the
+// ciphertext. out_mem is therefore written from out_block on encrypt but
+// from the raw received bytes (inblk, at the same bit position) on
+// decrypt -- see S_IT_MSG_OUT below.
 //
 // get_ad_block / get_c_block: rather than transcribe the reference's
 // several branching special cases (exact-multiple-of-block-size padding,
@@ -379,20 +391,30 @@ module elephant_lwc (
   reg [7:0]   out_mem [0:MAX_BYTES-1];
 
   // ---------------------------------------------------------------- helpers
+  // Bit-reversal of the 8-bit lfsr value (output bit i = input bit 7-i),
+  // matching the reference's chain of shifted single-bit ORs bit-for-bit.
+  // An earlier draft's last term was a literal 1'b0 instead of lfsr[7],
+  // silently dropping the input's top bit -- invisible for as long as
+  // perm_iv's bit 7 stayed 0 (true for the seed value 0x75), and wrong
+  // from the first round where the evolving IV set that bit.
   function [7:0] retnuoCl;
     input [7:0] lfsr;
     begin
       retnuoCl = {lfsr[0], lfsr[1], lfsr[2], lfsr[3],
-                  lfsr[4], lfsr[5], lfsr[6], 1'b0};
+                  lfsr[4], lfsr[5], lfsr[6], lfsr[7]};
     end
   endfunction
 
+  // The reference ORs the bit6^bit5 feedback into bit 0 of the shifted
+  // value (both operands are normalized to bit 0 by the `>>6`/`>>5`
+  // before the C's XOR). An earlier draft placed the feedback at bit 1
+  // of the OR-mask instead of bit 0.
   function [7:0] lcounter;
     input [7:0] lfsr;
     reg [7:0] shifted;
     begin
       shifted  = {lfsr[6:0], 1'b0};
-      lcounter = (shifted | {6'b0, lfsr[6] ^ lfsr[5], 1'b0}) & 8'h7f;
+      lcounter = (shifted | {7'b0, lfsr[6] ^ lfsr[5]}) & 8'h7f;
     end
   endfunction
 
@@ -460,8 +482,9 @@ module elephant_lwc (
     end
   endfunction
 
-  // get_c_block(bi): reads the OUTPUT stream (ciphertext when encrypting,
-  // recovered plaintext when decrypting) already written into out_mem.
+  // get_c_block(bi): reads ciphertext bytes already written into out_mem
+  // (encrypt: the freshly-produced ciphertext; decrypt: the raw received
+  // ciphertext -- see UNIFIED KEYSTREAM XOR in the file header).
   function [159:0] get_c_block;
     input [7:0] bi;
     integer j;
@@ -579,10 +602,14 @@ module elephant_lwc (
   wire [5:0] adbase = {coll_idx[3:0], 2'b00};    // coll_idx*4 during AD coll (<=15)
   wire [5:0] obase  = msg_off[5:0] + {1'b0, owc[2:0], 2'b00};
 
-  wire [31:0] out_word = {out_block[obit+:8],  out_block[(obit+8'd8)+:8],
-                          out_block[(obit+8'd16)+:8], out_block[(obit+8'd24)+:8]};
-  wire [31:0] tag_word = {tag_buffer[tbit+:8],  tag_buffer[(tbit+8'd8)+:8],
-                          tag_buffer[(tbit+8'd16)+:8], tag_buffer[(tbit+8'd24)+:8]};
+  // The first (lowest-index) flatvec byte of this chunk must go out
+  // FIRST on the bus, i.e. land at bits [7:0] (the bus's own per-word
+  // convention, same as on the input side above) -- so it goes last in
+  // this MSB-first concatenation, not first as an earlier draft had it.
+  wire [31:0] out_word = {out_block[(obit+8'd24)+:8], out_block[(obit+8'd16)+:8],
+                          out_block[(obit+8'd8)+:8],  out_block[obit+:8]};
+  wire [31:0] tag_word = {tag_buffer[(tbit+8'd24)+:8], tag_buffer[(tbit+8'd16)+:8],
+                          tag_buffer[(tbit+8'd8)+:8],  tag_buffer[tbit+:8]};
 
   assign do_data =
       (fsm == S_DO_PTHDR)  ? {(decrypt_r ? SEGT_PT : SEGT_CT), 1'b0, 1'b0,
@@ -611,16 +638,22 @@ module elephant_lwc (
           else if (pdi_valid) fsm <= S_PDI_OP;
         end
         S_SDI_HDR: if (sdi_valid) begin wcnt <= 2'd0; fsm <= S_SDI_KEY; end
-        // Words are byte-swapped on arrival so key_r ends up flatvec-ordered
-        // (byte 0 of the key, i.e. the FIRST byte on the bus, lands at
-        // key_r[7:0] -- the same "byte i at bits[8*i +: 8]" convention used
-        // for ad_mem/out_mem/get_ad_block/get_c_block throughout this file).
+        // key_r ends up flatvec-ordered (byte 0 of the key, i.e. the FIRST
+        // byte on the bus, lands at key_r[7:0] -- the same "byte i at
+        // bits[8*i +: 8]" convention used for ad_mem/out_mem/get_ad_block/
+        // get_c_block throughout this file) simply by using sdi_data as-is:
+        // the bus's own per-word convention already puts byte 0 at bits
+        // [7:0] (confirmed empirically via KAT runs against tinyjambu_lwc.v
+        // and others in this directory), which is a direct match. An
+        // earlier draft byte-swapped every word here, which (despite what
+        // its own comment claimed) put byte 0 at key_r[31:24] instead --
+        // the reverse of the stated, and actually needed, convention.
         S_SDI_KEY: if (sdi_valid) begin
           case (wcnt)
-            2'd0: key_r[31:0]   <= {sdi_data[7:0], sdi_data[15:8], sdi_data[23:16], sdi_data[31:24]};
-            2'd1: key_r[63:32]  <= {sdi_data[7:0], sdi_data[15:8], sdi_data[23:16], sdi_data[31:24]};
-            2'd2: key_r[95:64]  <= {sdi_data[7:0], sdi_data[15:8], sdi_data[23:16], sdi_data[31:24]};
-            default: key_r[127:96] <= {sdi_data[7:0], sdi_data[15:8], sdi_data[23:16], sdi_data[31:24]};
+            2'd0: key_r[31:0]   <= sdi_data;
+            2'd1: key_r[63:32]  <= sdi_data;
+            2'd2: key_r[95:64]  <= sdi_data;
+            default: key_r[127:96] <= sdi_data;
           endcase
           wcnt  <= wcnt + 2'd1;
           if (wcnt == 2'd3) begin key_loaded <= 1'b1; fsm <= S_IDLE; end
@@ -632,13 +665,14 @@ module elephant_lwc (
           fsm       <= S_PDI_NHDR;
         end
         S_PDI_NHDR: if (pdi_valid) begin wcnt <= 2'd0; fsm <= S_PDI_NDATA; end
-        // Same byte-swap-on-arrival rule as key_r above (flatvec-ordered,
-        // byte 0 -> npub_r[7:0]).
+        // Same direct (no-swap) rule as key_r above (flatvec-ordered,
+        // byte 0 -> npub_r[7:0], which the bus's own convention already
+        // gives for free).
         S_PDI_NDATA: if (pdi_valid) begin
           case (wcnt)
-            2'd0: npub_r[31:0]  <= {pdi_data[7:0], pdi_data[15:8], pdi_data[23:16], pdi_data[31:24]};
-            2'd1: npub_r[63:32] <= {pdi_data[7:0], pdi_data[15:8], pdi_data[23:16], pdi_data[31:24]};
-            default: npub_r[95:64] <= {pdi_data[7:0], pdi_data[15:8], pdi_data[23:16], pdi_data[31:24]};
+            2'd0: npub_r[31:0]  <= pdi_data;
+            2'd1: npub_r[63:32] <= pdi_data;
+            default: npub_r[95:64] <= pdi_data;
           endcase
           wcnt   <= wcnt + 2'd1;
           if (wcnt == 2'd2) begin
@@ -670,11 +704,16 @@ module elephant_lwc (
           coll_idx <= 5'd0;
           fsm <= (pdi_data[15:0] == 16'd0) ? S_PDI_PHDR : S_AD_COLL;
         end
+        // ad_mem[i] must hold the i-th AD byte in stream order (byte 0
+        // first); the bus's own per-word convention already puts byte 0
+        // at pdi_data[7:0], so the four lanes map straight across. An
+        // earlier draft wired these in reverse (pdi_data[31:24] first),
+        // storing every 4-byte AD chunk backwards.
         S_AD_COLL: if (pdi_valid) begin
-          ad_mem[adbase]      <= pdi_data[31:24];
-          ad_mem[adbase+6'd1] <= pdi_data[23:16];
-          ad_mem[adbase+6'd2] <= pdi_data[15:8];
-          ad_mem[adbase+6'd3] <= pdi_data[7:0];
+          ad_mem[adbase]      <= pdi_data[7:0];
+          ad_mem[adbase+6'd1] <= pdi_data[15:8];
+          ad_mem[adbase+6'd2] <= pdi_data[23:16];
+          ad_mem[adbase+6'd3] <= pdi_data[31:24];
           if (coll_idx == ad_words[4:0] - 5'd1) fsm <= S_PDI_PHDR;
           else                                   coll_idx <= coll_idx + 5'd1;
         end
@@ -705,9 +744,9 @@ module elephant_lwc (
           coll_idx <= 5'd0;
           fsm <= S_IT_MSG_COLL;
         end
+        // Same direct (no-swap) rule as key_r/npub_r/ad_mem above.
         S_IT_MSG_COLL: if (pdi_valid) begin
-          inblk[ibit+:32] <=
-              {pdi_data[7:0], pdi_data[15:8], pdi_data[23:16], pdi_data[31:24]};
+          inblk[ibit+:32] <= pdi_data;
           if (coll_idx == msg_words - 5'd1) fsm <= S_IT_MSG_CMB;
           else                              coll_idx <= coll_idx + 5'd1;
         end
@@ -716,14 +755,27 @@ module elephant_lwc (
           owc <= 4'd0;
           fsm <= S_IT_MSG_OUT;
         end
+        // get_c_block must read the CIPHERTEXT byte at each position,
+        // regardless of direction -- confirmed by tracing the reference's
+        // own crypto_aead_impl/crypto_aead_decrypt: the "encrypt ? c : m"
+        // selector's decrypt-side `m` is impl's formal parameter, which
+        // crypto_aead_decrypt binds to ITS OWN `c` argument (the ciphertext
+        // input), not the recovered-plaintext output buffer -- the exact
+        // opposite of what this file's header previously (wrongly)
+        // documented ("ciphertext when encrypting, recovered plaintext
+        // when decrypting"). out_block, computed via the unified
+        // keystream^in formula, holds ciphertext on encrypt but recovered
+        // PLAINTEXT on decrypt, so it is only correct for the encrypt
+        // half of this write; for decrypt, the ciphertext byte is what
+        // arrived over the bus, i.e. inblk at the same bit position.
         S_IT_MSG_OUT: if (do_ready) begin
           // Also commit this word's bytes into out_mem for later get_c_block
           // lookback (written unconditionally; only bytes < msg_rsize are
           // ever read back, so writing the full masked word is safe).
-          out_mem[obase]      <= out_block[obit+:8];
-          out_mem[obase+6'd1] <= out_block[(obit+8'd8)+:8];
-          out_mem[obase+6'd2] <= out_block[(obit+8'd16)+:8];
-          out_mem[obase+6'd3] <= out_block[(obit+8'd24)+:8];
+          out_mem[obase]      <= decrypt_r ? inblk[obit+:8]           : out_block[obit+:8];
+          out_mem[obase+6'd1] <= decrypt_r ? inblk[(obit+8'd8)+:8]    : out_block[(obit+8'd8)+:8];
+          out_mem[obase+6'd2] <= decrypt_r ? inblk[(obit+8'd16)+:8]   : out_block[(obit+8'd16)+:8];
+          out_mem[obase+6'd3] <= decrypt_r ? inblk[(obit+8'd24)+:8]   : out_block[(obit+8'd24)+:8];
           if (owc == msg_words[3:0] - 4'd1)   // msg_words <= 5, fits in 4 bits
             fsm <= S_IT_TAGC_CHK;
           else
@@ -777,8 +829,7 @@ module elephant_lwc (
 
         S_PDI_THDR: if (pdi_valid) begin wcnt <= 2'd0; fsm <= S_TAG_IN; end
         S_TAG_IN: if (pdi_valid) begin
-          tag_ok <= tag_ok & ({pdi_data[7:0],pdi_data[15:8],pdi_data[23:16],pdi_data[31:24]}
-                               == tag_buffer[tbit+:32]);
+          tag_ok <= tag_ok & (pdi_data == tag_buffer[tbit+:32]);
           wcnt   <= wcnt + 2'd1;
           if (wcnt == 2'd1) fsm <= S_OUT_STATUS;
         end

@@ -45,7 +45,29 @@ x86_64* — table-driven S-boxes, loop unrolling decisions, everything
 GCC's inliner/unroller decided is worth it, all differ from what the same
 source would produce on an embedded target's much more size-conscious
 codegen. Treat this as "how big is the reference implementation," not "how
-big would this be on a microcontroller."
+big would this be on a microcontroller." **Also: `size`'s default "text"
+column is a coarser bucket than the actual `.text` ELF section** — see
+`rom_dot_text_bytes`/`rom_dot_rodata_bytes` below and `../SOFTWARE-RESULTS.md`
+§4.6 for why a large fraction of this number (11-59%, design-dependent) is
+shared-library metadata, not code.
+
+**rom_dot_text_bytes / rom_dot_rodata_bytes** — added 2026-09-04: the
+*exact* `.text` and `.rodata` ELF section sizes, from `size -A` (Berkeley
+per-section listing) rather than the default `size`'s coarser grouping.
+`.text` is real executable code; `.rodata` is read-only data — mostly each
+algorithm's constant tables (round constants, S-boxes stored as lookup
+tables rather than computed, SKINNY's tweakey tables for Romulus, etc.).
+Neither is fabricated or estimated — both are `awk '$1==".text"'`/
+`'$1==".rodata"'` over `size -A`'s real output, defaulting to 0 for a
+design with no `.rodata` section at all (several have none — their tables,
+if any, get folded into `.text` as immediate constants or `.data.rel.ro`
+by the optimizer instead). `rom_dot_text_bytes + rom_dot_rodata_bytes` is
+**not** equal to `rom_bytes` for any of the twelve — the gap is ELF
+shared-library bookkeeping (`.dynsym`, `.dynstr`, `.rela.plt`, `.dynamic`,
+`.plt`/`.plt.sec`/`.got`, `.eh_frame`/`.eh_frame_hdr`, `.gnu.hash`,
+`.gnu.version*`, `.note.*`) that `size`'s default text bucket includes and
+this split deliberately excludes — see `../SOFTWARE-RESULTS.md` §4.6 for
+the full per-design table and what it means for reading `rom_bytes`.
 
 **ram_bytes** — `.data + .bss` (static/global state only). Deliberately
 excludes the call stack, which is reported separately below, since the two
@@ -97,8 +119,70 @@ rounds, not per-byte work).
 message with no associated data, so the per-byte cost of the main
 processing loop dominates over fixed setup cost. The two are two views of
 the same measurement (cross-checked against each other and found
-consistent — `cycles_per_byte × CPU_frequency⁻¹` and the wall-clock MB/s
-figure agree).
+consistent in order of magnitude — `cycles_per_byte × CPU_frequency⁻¹` and
+the wall-clock MB/s figure agree to within the clock-rate variation
+described next, not to the last digit).
+
+**dec_latency_cycles / dec_cycles_per_byte / dec_throughput_MBps /
+dec_roundtrip_ok** — added 2026-09-04: the `decrypt()` counterparts to the
+four columns above, same message shapes, same best-of-N methodology,
+computed from a real ciphertext (produced by that design's own `encrypt()`
+in the immediately preceding measurement, not a hand-built or synthetic
+one). `dec_roundtrip_ok` is 1 only if every rep's `decrypt()` call returned
+success *and* the recovered plaintext matched the original byte-for-byte;
+it is 1 for all twelve designs in this dataset. This checks the benchmark
+harness's own `DECRYPT_FN` wiring (`wrap/wrapper.c`, `-DDECRYPT_FN=...` in
+`build.sh` for the two hybrids) round-trips correctly — it is not a
+substitute for `../RESULTS.md` §1.1's KAT verification of the hardware RTL,
+and a `dec_roundtrip_ok` of 1 says nothing about whether the C reference
+computes the *cryptographically correct* ciphertext for any input other
+than the one it was just handed back.
+
+## Throughput curve (curve_results.csv)
+
+Added 2026-09-04, alongside the single 4096B `cycles_per_byte` point in
+`results.csv`: `driver.c` also sweeps message sizes {16, 64, 256, 1024,
+4096} bytes, encrypt-only, 0B AD, best-of-200 `rdtsc` per point (fewer reps
+than the main 4096B measurement's best-of-300, to keep total runtime
+reasonable across 12 designs × 5 sizes — the slowest designs, Elephant and
+PHOTON-Beetle, already take real wall-clock minutes at 4096B). Written to
+`bench/curve_results.csv` (raw label) and copied to `../curve_results.csv`
+(display name, matching `results.csv`'s convention) by `merge.py`. Purpose:
+a single 4096B data point can't distinguish "genuinely fast" from "fast
+once you amortize a large fixed setup cost over enough bytes" — the curve
+can. See `../SOFTWARE-RESULTS.md` §4.7 for what it found (ISAP's fixed
+per-call sponge-phase cost dominates dramatically at small message sizes,
+far more than any other design here).
+
+## The CPU's actual clock rate, and why it isn't one number
+
+This machine's CPU is an Intel Core i7-6700 (`lscpu`: base 3.40 GHz, max
+turbo 4.0 GHz, min 800 MHz) with the **`powersave` governor active**
+(`/sys/.../cpufreq/scaling_governor`) — not `performance` — so the core's
+actual clock during any given benchmark call depends on the scaling
+governor's ramp-up behaviour for that call's load shape, not a single fixed
+number. `rdtsc` on this CPU is `constant_tsc`/`nonstop_tsc` (invariant
+across P-states), so `latency_cycles`/`cycles_per_byte` are always
+TSC-referenced counts, not raw core cycles at whatever frequency the core
+happened to be running — but `throughput_MBps` is wall-clock (`clock_gettime`),
+which *does* reflect real elapsed time at whatever frequency the core
+actually ran at.
+
+Dividing `cycles_per_byte` (TSC ticks) into the wall-clock byte rate
+(`cycles_per_byte × throughput_bytes_per_sec`) recovers the **effective TSC
+rate implied by that specific design's own measurement** — and it is not
+constant: across the twelve designs in the 2026-09-02 dataset this ranges
+from **2.79 GHz to 3.87 GHz**, a ~39% spread, tracking each design's own
+loop duration/shape (a longer-running design's benchmark window gives the
+`powersave` governor more time to ramp up; a fast one may finish before it
+does). This is very likely the real mechanism behind the run-to-run
+variance flagged in `../SOFTWARE-RESULTS.md` §6 (including the ~32%
+Ascon-AEAD128 swing between passes) — not just "background load," but the
+governor itself responding differently to each design's own timing profile,
+on every single run. `sudo cpupower frequency-set -g performance` (or
+equivalent) before a rerun would remove this source of variance if a
+tighter cross-design or cross-run comparison is needed; it was not changed
+for this dataset in order to measure the machine in its default state.
 
 ## What's not here: energy
 

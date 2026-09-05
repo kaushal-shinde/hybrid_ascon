@@ -17,12 +17,20 @@
 #ifndef ENCRYPT_FN
 #define ENCRYPT_FN crypto_aead_encrypt
 #endif
+#ifndef DECRYPT_FN
+#define DECRYPT_FN crypto_aead_decrypt
+#endif
 
 extern int ENCRYPT_FN(unsigned char *c, unsigned long long *clen,
     const unsigned char *m, unsigned long long mlen,
     const unsigned char *ad, unsigned long long adlen,
     const unsigned char *nsec, const unsigned char *npub,
     const unsigned char *k);
+
+extern int DECRYPT_FN(unsigned char *m, unsigned long long *mlen,
+    unsigned char *nsec, const unsigned char *c, unsigned long long clen,
+    const unsigned char *ad, unsigned long long adlen,
+    const unsigned char *npub, const unsigned char *k);
 
 int bench_key_bytes(void)  { return KEYBYTES; }
 int bench_npub_bytes(void) { return NPUBBYTES; }
@@ -33,4 +41,11 @@ int bench_encrypt(unsigned char *c, unsigned long long *clen,
                    const unsigned char *ad, unsigned long long adlen,
                    const unsigned char *npub, const unsigned char *k) {
   return ENCRYPT_FN(c, clen, m, mlen, ad, adlen, (void*)0, npub, k);
+}
+
+int bench_decrypt(unsigned char *m, unsigned long long *mlen,
+                   const unsigned char *c, unsigned long long clen,
+                   const unsigned char *ad, unsigned long long adlen,
+                   const unsigned char *npub, const unsigned char *k) {
+  return DECRYPT_FN(m, mlen, (void*)0, c, clen, ad, adlen, npub, k);
 }

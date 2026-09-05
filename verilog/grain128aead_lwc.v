@@ -148,8 +148,19 @@ module grain128aead_lwc (
   wire databit = curbyte[bitpos];
   wire outbit  = databit ^ zbit;
   // plaintext bit for MAC purposes: encrypt absorbs the input (plaintext);
-  // decrypt absorbs the recovered plaintext (ct ^ z).
-  wire macbit  = decrypt_r ? outbit : databit;
+  // decrypt absorbs the recovered plaintext (ct ^ z). BUG (found via KAT on
+  // the first non-empty message): `outbit` is a live combinational wire
+  // (databit^zbit) re-evaluated every cycle. The even (keystream) phase
+  // computes it with THAT cycle's zbit and correctly latches it into
+  // outbyte[bitpos] -- but bitpos only advances on the odd phase, so by
+  // the following odd (MAC) cycle the LFSR/NFSR has shifted again and
+  // `zbit` has changed, while `databit` (same bitpos) hasn't. Reading the
+  // live `outbit` wire during the MAC phase therefore recomputes
+  // databit^(a *different*, wrong) zbit instead of reusing the bit
+  // actually output -- encrypt's macbit=databit never touches zbit at
+  // all, which is why only decrypt showed this (matching output bytes,
+  // wrong MAC, only visible once compared against the official tag).
+  wire macbit  = decrypt_r ? outbyte[bitpos] : databit;
 
   localparam [5:0]
     S_IDLE=6'd0, S_SDI_HDR=6'd1, S_SDI_KEY=6'd2,
@@ -165,14 +176,29 @@ module grain128aead_lwc (
 
   reg [5:0] fsm;
 
+  // S_AD_WORD/S_PT_WORD only actually read pdi_data when rem!=0 (there is
+  // more to consume) AND bsel==0 (not still working through a buffered
+  // word) -- both states fall straight through to their next phase
+  // (rem==0) or their bit-processing state (bsel!=0) WITHOUT touching
+  // pdi_data otherwise. Asserting ready unconditionally there let the
+  // next segment's header word get silently eaten during that skip cycle
+  // -- same bug class found and fixed in xoodyak_lwc.v and
+  // giftcofb_lwc.v, checked for here proactively.
   assign pdi_ready = (fsm==S_IDLE)||(fsm==S_PDI_OP)||(fsm==S_PDI_NHDR)||
-                     (fsm==S_PDI_NDATA)||(fsm==S_PDI_AHDR)||(fsm==S_AD_WORD)||
-                     (fsm==S_PDI_PHDR)||(fsm==S_PT_WORD)||(fsm==S_PDI_THDR)||
-                     (fsm==S_TAG_WORD);
+                     (fsm==S_PDI_NDATA)||(fsm==S_PDI_AHDR)||
+                     ((fsm==S_AD_WORD)&&(rem!=16'd0)&&(bsel==2'd0))||
+                     (fsm==S_PDI_PHDR)||
+                     ((fsm==S_PT_WORD)&&(rem!=16'd0)&&(bsel==2'd0))||
+                     (fsm==S_PDI_THDR)||(fsm==S_TAG_WORD);
   assign sdi_ready = (fsm==S_IDLE)||(fsm==S_SDI_HDR)||(fsm==S_SDI_KEY);
 
-  assign do_valid = (fsm==S_DO_PTHDR)||(fsm==S_PT_OUT)||(fsm==S_DO_TAGHDR)||
-                    (fsm==S_OUT_TAG)||(fsm==S_OUT_STATUS);
+  // S_DO_TAGHDR/S_OUT_TAG run for both directions (decrypt needs the tag
+  // computed internally to compare) but only encrypt puts it on the DO bus
+  // -- same bug class found and fixed in xoodyak_lwc.v and giftcofb_lwc.v,
+  // checked for here proactively rather than rediscovered via KAT.
+  assign do_valid = (fsm==S_DO_PTHDR)||(fsm==S_PT_OUT)||
+                    ((fsm==S_DO_TAGHDR)&&!decrypt_r)||
+                    ((fsm==S_OUT_TAG)&&!decrypt_r)||(fsm==S_OUT_STATUS);
   assign do_last  = (fsm==S_OUT_STATUS);
   assign do_data  =
       (fsm==S_DO_PTHDR)  ? {(decrypt_r?SEGT_PT:SEGT_CT),1'b0,1'b0,1'b1,
@@ -365,8 +391,18 @@ module grain128aead_lwc (
           end
           if (jcnt==5'd15) begin
             jcnt<=5'd0; rem <= rem - 16'd1;
+            // BUG (found via KAT on the first message length not a
+            // multiple of 4, mlen=5): outword was never cleared between
+            // words, only the current byte lane was ever written -- a
+            // short final word (1-3 valid bytes) left the API's required
+            // "clear unused output portions" (Sec. 2.7) unmet, leaking
+            // whatever the *previous* output word's upper bytes were.
+            // bsel==0 always starts a fresh word, so replacing the whole
+            // register there (instead of only its low byte) zeroes the
+            // unused lanes for every possible final-word length in one
+            // assignment.
             case (bsel)
-              2'd0: outword[7:0]   <= outbyte;
+              2'd0: outword <= {24'd0, outbyte};
               2'd1: outword[15:8]  <= outbyte;
               2'd2: outword[23:16] <= outbyte;
               default: outword[31:24] <= outbyte;

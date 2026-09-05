@@ -1,0 +1,4 @@
+/home/nesec/Desktop/projects/ascon hybrid/ascon-aead128/permutations.h:26:20:P8	24	static
+/home/nesec/Desktop/projects/ascon hybrid/ascon-aead128/permutations.h:11:20:P12	24	static
+/home/nesec/Desktop/projects/ascon hybrid/ascon-aead128/aead.c:8:5:crypto_aead_encrypt	160	static
+/home/nesec/Desktop/projects/ascon hybrid/ascon-aead128/aead.c:119:5:crypto_aead_decrypt	192	static

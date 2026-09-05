@@ -1,0 +1,7 @@
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/sparkle/sparkle_ref.c:62:6:linear_layer	24	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/sparkle/sparkle_ref.c:109:6:sparkle_ref	64	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/sparkle/sparkle_ref.c:129:6:linear_layer_inv	16	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/sparkle/sparkle_ref.c:176:6:sparkle_inv_ref	48	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/sparkle/sparkle_ref.c:196:6:clear_state_ref	16	static
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/sparkle/sparkle_ref.c:206:6:print_state_ref	80	dynamic,bounded
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/sparkle/sparkle_ref.c:223:6:test_sparkle_ref	112	static

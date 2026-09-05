@@ -1,0 +1,2 @@
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/xoodyak/encrypt.c:26:5:crypto_aead_encrypt	176	dynamic,bounded
+/home/nesec/Desktop/projects/ascon hybrid/lwc-finalists/xoodyak/encrypt.c:56:5:crypto_aead_decrypt	176	dynamic,bounded

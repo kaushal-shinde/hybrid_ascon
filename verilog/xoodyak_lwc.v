@@ -110,6 +110,7 @@ module xoodyak_lwc (
   reg [31:0] c [0:11];   // post-chi
   reg [31:0] nx [0:11];  // round output (post-rho-east)
   integer ri;
+  reg [31:0] rot5, rot14; // see note below
 
   task xoodoo_round;
     input [31:0] rc;
@@ -118,8 +119,21 @@ module xoodyak_lwc (
       // Theta
       for (x = 0; x < 4; x = x + 1)
         p[x] = a[x] ^ a[x+4] ^ a[x+8];
-      for (x = 0; x < 4; x = x + 1)
-        e[x] = rotl32(p[(x+3)%4], 5) ^ rotl32(p[(x+3)%4], 14);  // (x-1)%4
+      // rot5/rot14 hold each rotl32() call's result before combining, rather
+      // than writing `rotl32(...,5) ^ rotl32(...,14)` inline: calling the
+      // same function twice in one expression, inside a for loop, produced
+      // silently wrong results under this Vivado xsim build -- the second
+      // call's result leaking into other loop iterations (e.g. e[2] and
+      // e[3] both came out equal to e[0]'s second call, 0x80, instead of
+      // their own correct value of 0) -- found only by comparing every
+      // intermediate lane against the C reference word by word, not by lint
+      // or by any single-call test of rotl32 in isolation, which is why
+      // this is spelled out here rather than left as a one-line diff.
+      for (x = 0; x < 4; x = x + 1) begin
+        rot5  = rotl32(p[(x+3)%4], 5);
+        rot14 = rotl32(p[(x+3)%4], 14);
+        e[x]  = rot5 ^ rot14;  // (x-1)%4
+      end
       for (x = 0; x < 4; x = x + 1) begin
         t[x]   = a[x]   ^ e[x];
         t[x+4] = a[x+4] ^ e[x];
@@ -165,6 +179,7 @@ module xoodyak_lwc (
   reg [15:0] ad_len, pt_len;
   reg [5:0]  chunk_len;     // bytes in THIS chunk (<=44 or <=24), set once
   reg        first_ad_chunk;
+  reg        first_pt_chunk;
   reg        decrypt_r;
 
   localparam [5:0] AD_RATE = 6'd44, PT_RATE = 6'd24;
@@ -240,15 +255,37 @@ module xoodyak_lwc (
   wire [15:0] ad_next_len = ad_len - {10'd0,AD_RATE};
   wire [15:0] pt_next_len = pt_len - {10'd0,PT_RATE};
 
+  // S_AD_WORD/S_PT_WORD only assert ready when they will actually consume a
+  // word (byte_off < chunk_len): both states fall straight through to their
+  // *_PAD state without touching pdi_data once the chunk is exhausted --
+  // most visibly on an empty (adlen=0) AD phase, where chunk_len is already
+  // 0 the instant S_AD_WORD is entered. Asserting ready unconditionally
+  // there let a well-formed sender's *next* PDI word (the following
+  // segment's header) get silently consumed and discarded during that
+  // single cycle, desynchronizing the rest of the stream by one word --
+  // found via KAT simulation, not visible from lint or from any AD/PT
+  // length that actually needs multiple words.
   assign pdi_ready = (fsm == S_IDLE)     || (fsm == S_PDI_OP)   ||
                      (fsm == S_PDI_NHDR)|| (fsm == S_PDI_NDATA)||
-                     (fsm == S_PDI_AHDR)|| (fsm == S_AD_WORD)  ||
-                     (fsm == S_PDI_PHDR)|| (fsm == S_PT_WORD)  ||
+                     (fsm == S_PDI_AHDR)||
+                     (fsm == S_AD_WORD && byte_off < {10'd0,chunk_len}) ||
+                     (fsm == S_PDI_PHDR)||
+                     (fsm == S_PT_WORD && byte_off < {10'd0,chunk_len}) ||
                      (fsm == S_PDI_THDR)|| (fsm == S_TAG_WORD);
   assign sdi_ready = (fsm == S_IDLE) || (fsm == S_SDI_HDR) || (fsm == S_SDI_KEY);
 
+  // S_DO_TAGHDR/S_OUT_TAG run for BOTH directions -- the tag always has to
+  // be computed (mac0..mac3 captured) so decrypt can compare it -- but only
+  // encrypt actually puts that tag on the DO bus; the API never re-sends a
+  // tag on a decrypt. Without the !decrypt_r guard here, decrypt silently
+  // emitted 5 extra DO words (a tag header + 4 tag words) every single
+  // transaction that a normal encrypt/decrypt pair would never trigger a
+  // functional mismatch on early -- it only showed up as a growing
+  // word-count drift once transactions were chained back-to-back, exactly
+  // matching 1089 decrypts x 5 extra words against the KAT grid.
   assign do_valid = (fsm == S_DO_PTHDR) || (fsm == S_PT_OUT) ||
-                    (fsm == S_DO_TAGHDR) || (fsm == S_OUT_TAG) ||
+                    ((fsm == S_DO_TAGHDR) && !decrypt_r) ||
+                    ((fsm == S_OUT_TAG) && !decrypt_r) ||
                     (fsm == S_OUT_STATUS);
   assign do_last  = (fsm == S_OUT_STATUS);
   assign do_data  =
@@ -312,6 +349,7 @@ module xoodyak_lwc (
           a[9]<=0; a[10]<=0;
           a[11]<=32'h0200_0000;  // byte47 (top byte of lane11) = Cd=0x02
           first_ad_chunk<=1'b1;
+          first_pt_chunk<=1'b1;
           fsm <= S_PDI_AHDR;
         end
 
@@ -383,7 +421,15 @@ module xoodyak_lwc (
           fsm <= S_DO_PTHDR;
         end
         S_DO_PTHDR: if (do_ready) fsm <= S_PT_PERM;
+        // Up(Cu): Cu=0x80 on the PT/CT phase's first chunk only, else 0 --
+        // applied to byte 47 (a[11]'s top byte) *before* the permute, unlike
+        // AD's Cd which the C reference applies via Down() *after* its
+        // permute. Missing entirely until KAT simulation caught it: every
+        // other domain-separation byte in this core (the two Cd's) was
+        // implemented, but this one -- the only Cu that isn't a no-op 0 --
+        // was documented in this file's own header and never wired up.
         S_PT_PERM: begin
+          if (first_pt_chunk) a[11] <= a[11] ^ 32'h8000_0000;
           round_idx<=4'd0; ret<=S_PT_WORD; lane_idx<=4'd0; byte_off<=16'd0;
           fsm<=S_PERM_RUN;
         end
@@ -393,10 +439,21 @@ module xoodyak_lwc (
           end else fsm <= S_PT_PAD;
         end
         // Keystream XOR: out = lane ^ in_word. For encrypt in_word=plaintext
-        // so out=ciphertext; for decrypt in_word=ciphertext so out=plaintext
-        // -- and in BOTH cases the value absorbed back (S_PT_OUT below) must
-        // be the plaintext, i.e. `out_word` after this XOR either way, which
-        // is exactly what pho/pho' in the reference compute.
+        // so out=ciphertext (out_word = S^plaintext); for decrypt
+        // in_word=ciphertext so out=plaintext (out_word = S^ciphertext).
+        // Cyclist_Crypt's C.inc always absorbs the *plaintext* back into the
+        // state via a genuine XOR-into-state (Cyclist_Down -> SnP_AddBytes),
+        // i.e. newS = S ^ plaintext -- not an overwrite. For decrypt
+        // plaintext = out_word directly, so newS = S ^ out_word, which is
+        // what S_PT_OUT below computes. For encrypt, though, out_word
+        // *already equals* S ^ plaintext (that's the definition of
+        // ciphertext here) -- so newS = S ^ plaintext = out_word itself; a
+        // *second* XOR with S (S ^ out_word = S ^ (S^plaintext) = plaintext)
+        // cancels the state term and silently absorbs the bare plaintext
+        // instead, which only agreed with the correct answer by coincidence
+        // on every all-empty KAT record (S=0 there, so S^out_word and
+        // out_word were the same value) -- found only once a KAT record
+        // with real plaintext (mlen=1) exercised this path.
         S_PT_XOR: begin
           if (full_word) out_word <= a[lane_idx] ^ out_word;
           else            out_word <= keep_n(a[lane_idx] ^ out_word, rem_bytes);
@@ -404,11 +461,13 @@ module xoodyak_lwc (
         end
         S_PT_OUT: if (do_ready) begin
           if (full_word) begin
-            a[lane_idx] <= a[lane_idx] ^ out_word;
+            a[lane_idx] <= decrypt_r ? (a[lane_idx] ^ out_word) : out_word;
             lane_idx<=lane_idx+4'd1; byte_off<=byte_off+16'd4;
             fsm<=S_PT_WORD;
           end else begin
-            a[lane_idx] <= xor_n(a[lane_idx], out_word, rem_bytes);
+            a[lane_idx] <= decrypt_r
+                          ? xor_n(a[lane_idx], out_word, rem_bytes)
+                          : xor_n(a[lane_idx], out_word ^ a[lane_idx], rem_bytes);
             fsm <= S_PT_PAD;
           end
         end
@@ -416,6 +475,7 @@ module xoodyak_lwc (
         S_PT_PAD: begin
           if (pad_fresh_lane) a[lane_idx] <= a[lane_idx] ^ 32'h0000_0001;
           else a[lane_idx] <= xor_byte_at(a[lane_idx], 8'h01, rem_bytes);
+          first_pt_chunk <= 1'b0;
           if (pt_len > {10'd0,PT_RATE}) begin
             pt_len <= pt_next_len;
             chunk_len <= (pt_next_len > {10'd0,PT_RATE}) ? PT_RATE
@@ -427,7 +487,13 @@ module xoodyak_lwc (
         end
 
         // ------------------------------------------------------- squeeze --
+        // Up(Cu=0x40): the tag squeeze's own domain-separation byte, applied
+        // to byte 47 before the permute -- unconditional (there's exactly
+        // one tag squeeze per transaction, no "first chunk" gating needed,
+        // unlike PT's Cu=0x80). Same class of bug as S_PT_PERM above: this
+        // Cu was documented in the header and never wired up.
         S_TAG_PERM: begin
+          a[11] <= a[11] ^ 32'h4000_0000;
           round_idx<=4'd0; ret<=S_DO_TAGHDR; lane_idx<=4'd0;
           fsm<=S_PERM_RUN;
         end

@@ -1,0 +1,16 @@
+0.7
+2020.2
+Jun 16 2026
+11:12:08
+/home/nesec/Desktop/projects/ascon hybrid/verilog/ascon_aead128.v,1787648014,verilog,,,,ascon_aead128,,,,,,,,
+/home/nesec/Desktop/projects/ascon hybrid/verilog/asconsip64_aead.v,1787736707,verilog,,,,asconsip64_aead,,,,,,,,
+/home/nesec/Desktop/projects/ascon hybrid/verilog/asconsip_aead.v,1787647840,verilog,,,,asconsip_aead,,,,,,,,
+/home/nesec/Desktop/projects/ascon hybrid/verilog/elephant_lwc.v,1788345130,verilog,,,,elephant_lwc,,,,,,,,
+/home/nesec/Desktop/projects/ascon hybrid/verilog/giftcofb_lwc.v,1788340799,verilog,,,,giftcofb_lwc,,,,,,,,
+/home/nesec/Desktop/projects/ascon hybrid/verilog/grain128aead_lwc.v,1788341426,verilog,,,,grain128aead_lwc,,,,,,,,
+/home/nesec/Desktop/projects/ascon hybrid/verilog/isap_lwc.v,1788346276,verilog,,,,isap_lwc,,,,,,,,
+/home/nesec/Desktop/projects/ascon hybrid/verilog/photonbeetle_lwc.v,1788344102,verilog,,,,photonbeetle_lwc,,,,,,,,
+/home/nesec/Desktop/projects/ascon hybrid/verilog/romulus_n_lwc.v,1788342293,verilog,,,,romulus_n_lwc,,,,,,,,
+/home/nesec/Desktop/projects/ascon hybrid/verilog/sparkle_lwc.v,1788342612,verilog,,,,sparkle_lwc,,,,,,,,
+/home/nesec/Desktop/projects/ascon hybrid/verilog/tinyjambu_lwc.v,1787998238,verilog,,,,tinyjambu_lwc,,,,,,,,
+/home/nesec/Desktop/projects/ascon hybrid/verilog/xoodyak_lwc.v,1788177187,verilog,,,,xoodyak_lwc,,,,,,,,
