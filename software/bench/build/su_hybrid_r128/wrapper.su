@@ -1,5 +1,0 @@
-/home/nesec/Desktop/projects/ascon hybrid/software/bench/wrap/wrapper.c:35:5:bench_key_bytes	8	static
-/home/nesec/Desktop/projects/ascon hybrid/software/bench/wrap/wrapper.c:36:5:bench_npub_bytes	8	static
-/home/nesec/Desktop/projects/ascon hybrid/software/bench/wrap/wrapper.c:37:5:bench_abytes	8	static
-/home/nesec/Desktop/projects/ascon hybrid/software/bench/wrap/wrapper.c:39:5:bench_encrypt	48	dynamic,bounded
-/home/nesec/Desktop/projects/ascon hybrid/software/bench/wrap/wrapper.c:46:5:bench_decrypt	48	dynamic,bounded

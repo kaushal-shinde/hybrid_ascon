@@ -62,7 +62,7 @@ Neither is fabricated or estimated — both are `awk '$1==".text"'`/
 design with no `.rodata` section at all (several have none — their tables,
 if any, get folded into `.text` as immediate constants or `.data.rel.ro`
 by the optimizer instead). `rom_dot_text_bytes + rom_dot_rodata_bytes` is
-**not** equal to `rom_bytes` for any of the twelve — the gap is ELF
+**not** equal to `rom_bytes` for any of the eleven — the gap is ELF
 shared-library bookkeeping (`.dynsym`, `.dynstr`, `.rela.plt`, `.dynamic`,
 `.plt`/`.plt.sec`/`.got`, `.eh_frame`/`.eh_frame_hdr`, `.gnu.hash`,
 `.gnu.version*`, `.note.*`) that `size`'s default text bucket includes and
@@ -84,9 +84,9 @@ right, so it's worth explaining. The first approach was a runtime
 stack with a sentinel byte, run one `encrypt()` call, see how much got
 overwritten) — the standard technique for measuring stack use on embedded
 targets. On this native x86_64 build it produced the *same* number,
-byte-for-byte, for all twelve algorithms — a dead giveaway that something
+byte-for-byte, for all eleven algorithms — a dead giveaway that something
 structural was swamping the signal rather than a genuine coincidence
-across twelve unrelated codebases. Root cause: glibc's own per-thread setup
+across eleven unrelated codebases. Root cause: glibc's own per-thread setup
 (TLS/TCB placement, `dlopen`'s lazy-binding machinery) touches a fixed
 ~6.3&nbsp;KB of any custom pthread stack before the algorithm's own code
 ever runs, and every one of these AEAD calls uses far less than that on a
@@ -130,9 +130,9 @@ computed from a real ciphertext (produced by that design's own `encrypt()`
 in the immediately preceding measurement, not a hand-built or synthetic
 one). `dec_roundtrip_ok` is 1 only if every rep's `decrypt()` call returned
 success *and* the recovered plaintext matched the original byte-for-byte;
-it is 1 for all twelve designs in this dataset. This checks the benchmark
+it is 1 for all eleven designs in this dataset. This checks the benchmark
 harness's own `DECRYPT_FN` wiring (`wrap/wrapper.c`, `-DDECRYPT_FN=...` in
-`build.sh` for the two hybrids) round-trips correctly — it is not a
+`build.sh` for the hybrid) round-trips correctly — it is not a
 substitute for `../RESULTS.md` §1.1's KAT verification of the hardware RTL,
 and a `dec_roundtrip_ok` of 1 says nothing about whether the C reference
 computes the *cryptographically correct* ciphertext for any input other
@@ -171,11 +171,15 @@ actually ran at.
 Dividing `cycles_per_byte` (TSC ticks) into the wall-clock byte rate
 (`cycles_per_byte × throughput_bytes_per_sec`) recovers the **effective TSC
 rate implied by that specific design's own measurement** — and it is not
-constant: across the twelve designs in the 2026-09-02 dataset this ranges
-from **2.79 GHz to 3.87 GHz**, a ~39% spread, tracking each design's own
+constant, and the spread itself isn't constant either: in the 2026-09-02
+dataset this ranged
+from **2.79 GHz to 3.87 GHz**, a ~39% spread, while the 2026-09-05 rerun
+ranged only **3.06–3.30 GHz** (~7.7%) and the 2026-09-07 rerun
+**2.79–3.16 GHz** (~13.5%) — all tracking each design's own
 loop duration/shape (a longer-running design's benchmark window gives the
 `powersave` governor more time to ramp up; a fast one may finish before it
-does). This is very likely the real mechanism behind the run-to-run
+does) and, evidently, how much else was going on on the machine at the
+time. This is very likely the real mechanism behind the run-to-run
 variance flagged in `../SOFTWARE-RESULTS.md` §6 (including the ~32%
 Ascon-AEAD128 swing between passes) — not just "background load," but the
 governor itself responding differently to each design's own timing profile,

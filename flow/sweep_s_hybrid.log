@@ -1,0 +1,26 @@
+excluding 36 DONT_USE cells
+=== sky130 sweep: 7 iterations, 1 concurrent, util=45 density=0.60 ===
+SKIP ascon_aead128 (already done)
+DONE asconsip64_aead: asconsip64_aead,17.012,58.78,48303.83,12869,20.300,-0.04
+SKIP tinyjambu_lwc (already done)
+SKIP xoodyak_lwc (already done)
+SKIP giftcofb_lwc (already done)
+SKIP grain128aead_lwc (already done)
+SKIP sparkle_lwc (already done)
+SKIP elephant_lwc (already done)
+SKIP isap_lwc (already done)
+SKIP photonbeetle_lwc (already done)
+SKIP romulus_n_lwc (already done)
+=== SKY130 SWEEP COMPLETE -> /home/nesec/Desktop/projects/ascon hybrid/flow/sky130_results.csv ===
+design,period_ns,fmax_mhz,area_um2,gate_equiv,power_mw,clock_skew_ns
+ascon_aead128,3.838,260.55,62955.38,16772,88.000,0.05
+asconsip64_aead,17.012,58.78,48303.83,12869,20.300,-0.04
+tinyjambu_lwc,3.327,300.57,27080.97,7215,10.100,0.03
+xoodyak_lwc,5.102,196.00,74590.29,19872,19.500,0.04
+giftcofb_lwc,4.271,234.14,61003.51,16252,38.800,0.04
+grain128aead_lwc,3.606,277.32,41247.06,10989,16.400,-0.04
+sparkle_lwc,24.243,41.25,140096.86,37323,109.000,0.09
+elephant_lwc,12.789,78.19,173446.35,46208,38.200,-0.07
+isap_lwc,5.380,185.87,106288.19,28316,83.200,0.06
+photonbeetle_lwc,8.961,111.59,99502.93,26509,56.800,-0.06
+romulus_n_lwc,4.875,205.13,84876.40,22612,38.700,0.06

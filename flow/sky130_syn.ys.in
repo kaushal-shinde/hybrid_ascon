@@ -1,0 +1,21 @@
+# yosys synthesis to the sky130hd standard-cell library.
+# Placeholders (@RTL@ etc.) are substituted by run_sky130.sh.
+read_verilog @RTL@
+hierarchy -check -top @TOP@
+
+synth -top @TOP@ -flatten
+
+# map sequential elements, then combinational logic, timing-driven at @DELAY_PS@ ps.
+# @DONTUSE@ excludes the platform's DONT_USE_CELLS (power-gating/probe cells that
+# ORFS never maps to); run_sky130.sh reads that list out of the platform config.mk.
+dfflibmap -liberty @LIB@
+abc -liberty @LIB@ -D @DELAY_PS@ @DONTUSE@
+
+# constants must become real cells before place-and-route
+hilomap -hicell sky130_fd_sc_hd__conb_1 HI -locell sky130_fd_sc_hd__conb_1 LO
+setundef -zero
+splitnets
+opt_clean -purge
+
+tee -o @STATS@ stat -liberty @LIB@
+write_verilog -noattr @NETLIST@

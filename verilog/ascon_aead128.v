@@ -148,7 +148,9 @@ module ascon_aead128 (
   wire [127:0] new_rate = din_ad ? (rate ^ din_m) ^ padv
                                  : (dec_r ? dec_rate ^ padv
                                           : enc_rate ^ padv);
-  wire [127:0] blk_out  = dec_r ? (rate ^ din_m) : enc_rate;
+  // ciphertext on encrypt, plaintext on decrypt: the same XOR either way, so
+  // only the state update above forks (enc_rate vs. dec_rate)
+  wire [127:0] blk_out  = rate ^ din_m;
 
   // domain separation lands on x4 the first time a message block is taken
   wire [63:0] x4_ds = st[63:0] ^ ((!din_ad && !dsep_done) ? (64'h80 << 56) : 64'd0);

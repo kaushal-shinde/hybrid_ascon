@@ -1,20 +1,12 @@
-// Ascon-SipHash hybrid AEAD, narrow-rate variant: 64-bit rate, 192-bit capacity.
+// Ascon-SipHash hybrid AEAD: 64-bit rate, 192-bit capacity.
 // Round-based, one permutation round per cycle.
 //
-// Functional twin of ascon-siphash/asconsip64.c, and architecturally identical
-// to asconsip_aead.v apart from one thing: the rate is x0 alone (64 bits)
-// instead of x0,x1 (128 bits), so x1 moves into the capacity.
+// Functional twin of ascon-siphash/asconsip64.c. 256-bit state (x0..x3, 64
+// bits each); rate is x0 alone (64 bits), capacity is x1,x2,x3 (192 bits),
+// data port is 64 bits wide, throughput is 64/6 = 10.67 bits/cycle.
 //
-//                     asconsip_aead.v        this module
-//   state             256 bits               256 bits
-//   rate              128 bits (x0,x1)       64 bits  (x0)
-//   capacity          128 bits (x2,x3)       192 bits (x1,x2,x3)
-//   data port         128 bits               64 bits
-//   throughput        16 bits/cycle          8 bits/cycle
-//
-// The 192-bit capacity is the point: it matches Ascon-AEAD128's, which the
-// wide-rate hybrid does not. Same permutation, same round counts, same clock,
-// half the throughput.
+// The 192-bit capacity is the point: it matches Ascon-AEAD128's own capacity
+// in a 256-bit state.
 //
 // WARNING: experimental, unanalysed construction. See ascon-siphash/asconsip64.h.
 //
@@ -27,8 +19,10 @@
 //     din_bytes in 0..7; full blocks carry din_bytes = 8 and din_last = 0
 //   * a phase with no data is simply not fed; an empty message is still one
 //     last block with din_bytes = 0
+//   * decrypt is latched from `decrypt` at start; the core emits the computed
+//     tag and the host compares it
 //
-// Cycles: 12 init + 8 per AD block + 8 per non-final message block + 12 final.
+// Cycles: 10 init + 6 per AD block + 6 per non-final message block + 10 final.
 
 module asconsip64_aead (
     input  wire        clk,
@@ -105,11 +99,12 @@ module asconsip64_aead (
     end
   endfunction
 
-  // rate field holds 8, so this variant can never share a state with the
-  // 128-bit-rate one
+  // same IV encoding as Ascon-AEAD128, with the rate field holding 8 and the
+  // round fields 10/6 rather than Ascon's 12/8 -- so a state of this variant
+  // cannot collide with Ascon's, nor with the earlier 12/8 version of itself
   localparam [63:0] IV = (64'd1)
-                       | (64'd12  << 16)
-                       | (64'd8   << 20)
+                       | (64'd10  << 16)
+                       | (64'd6   << 20)
                        | (64'd128 << 24)
                        | (64'd8   << 40)
                        | (64'h53  << 48);
@@ -147,9 +142,12 @@ module asconsip64_aead (
   wire [63:0] new_rate = din_ad ? (rate ^ din_m) ^ padv
                                 : (dec_r ? dec_rate ^ padv
                                          : enc_rate ^ padv);
-  wire [63:0] blk_out  = dec_r ? (rate ^ din_m) : enc_rate;
+  // ciphertext on encrypt, plaintext on decrypt: the same XOR either way, so
+  // only the state update below forks (xor vs. masked replace)
+  wire [63:0] blk_out  = rate ^ din_m;
 
-  // domain separation lands on x3, the last capacity word
+  // domain separation lands on x3, the last capacity word, the first time a
+  // message block is taken -- 0x80 in byte 7, the same DSEP as Ascon-AEAD128
   wire [63:0] x3_ds = st[63:0] ^ ((!din_ad && !dsep_done) ? (64'h80 << 56) : 64'd0);
 
   always @(posedge clk or negedge rst_n) begin
@@ -178,7 +176,7 @@ module asconsip64_aead (
             dsep_done <= 1'b0;
             // x0 = N0, x1 = N1, x2 = K0, x3 = K1 ^ IV
             st        <= {npub[63:0], npub[127:64], key[63:0], key[127:64] ^ IV};
-            rc        <= 4'd0;          // p^12
+            rc        <= 4'd2;          // p^10
             ret       <= S_INITK;
             fsm       <= S_PERM;
           end
@@ -208,7 +206,7 @@ module asconsip64_aead (
             if (!din_ad && din_last) begin
               fsm <= S_FINK;
             end else begin
-              rc  <= 4'd4;              // p^8
+              rc  <= 4'd6;              // p^6
               ret <= S_WAIT;
               fsm <= S_PERM;
             end
@@ -217,7 +215,7 @@ module asconsip64_aead (
 
         S_FINK: begin
           st  <= {st[255:128], st[127:64] ^ k0, st[63:0] ^ k1};
-          rc  <= 4'd0;                  // p^12
+          rc  <= 4'd2;                  // p^10
           ret <= S_DONE;
           fsm <= S_PERM;
         end

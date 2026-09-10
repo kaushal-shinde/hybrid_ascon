@@ -96,7 +96,6 @@ def scatter(df):
     # not additive, or it lands nowhere near the point it's labeling)
     offsets = {
         "Ascon-AEAD128": (250, 1.12, "left"),
-        "hybrid r=128": (-200, 1.15, "right"),
         "hybrid r=64": (200, 0.82, "left"),
         "TinyJAMBU-128": (250, 1.18, "left"),
         "Xoodyak": (250, 0.80, "left"),

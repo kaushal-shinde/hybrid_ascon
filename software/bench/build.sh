@@ -1,5 +1,5 @@
 #!/bin/bash
-# Compile all 12 official/reference C implementations into shared libraries
+# Compile all 11 official/reference C implementations into shared libraries
 # with a uniform bench_* ABI (see wrap/wrapper.c), for native x86_64
 # profiling: latency, throughput, stack high-water-mark, ROM/RAM proxy.
 set -e
@@ -40,7 +40,6 @@ build() {
 FIN="$ROOT/lwc-finalists"
 
 build ascon "$ROOT/ascon-aead128" "-include api.h" aead.c
-build hybrid_r128 "$ROOT/ascon-siphash" "-DKEYBYTES=16 -DNPUBBYTES=16 -DABYTES=16 -DENCRYPT_FN=asconsip_aead_encrypt -DDECRYPT_FN=asconsip_aead_decrypt" asconsip.c
 build hybrid_r64 "$ROOT/ascon-siphash" "-DKEYBYTES=16 -DNPUBBYTES=16 -DABYTES=16 -DENCRYPT_FN=asconsip64_aead_encrypt -DDECRYPT_FN=asconsip64_aead_decrypt" asconsip64.c
 build tinyjambu "$FIN/tinyjambu" "-include api.h" encrypt.c
 build xoodyak "$FIN/xoodyak" "-include api.h" encrypt.c Xoodyak.c Xoodoo-reference.c

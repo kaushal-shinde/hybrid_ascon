@@ -1,0 +1,25 @@
+=== Vivado sweep: 7 iterations, 1 concurrent ===
+SKIP ascon_aead128 (already done)
+DONE asconsip64_aead: asconsip64_aead,7.171,139.45,888,600,0,26.0
+SKIP tinyjambu_lwc (already done)
+SKIP xoodyak_lwc (already done)
+SKIP giftcofb_lwc (already done)
+SKIP grain128aead_lwc (already done)
+SKIP sparkle_lwc (already done)
+SKIP elephant_lwc (already done)
+SKIP isap_lwc (already done)
+SKIP photonbeetle_lwc (already done)
+SKIP romulus_n_lwc (already done)
+=== VIVADO SWEEP COMPLETE -> /home/nesec/Desktop/projects/ascon hybrid/flow/vivado_results.csv ===
+design,period_ns,fmax_mhz,luts,regs,unrouted,dyn_power_mw
+ascon_aead128,4.142,241.43,1319,728,0,75.0
+asconsip64_aead,7.171,139.45,888,600,0,26.0
+tinyjambu_lwc,4.322,231.37,528,533,0,23.0
+xoodyak_lwc,7.698,129.90,1655,885,0,39.0
+giftcofb_lwc,8.334,119.99,1832,1005,0,11.0
+grain128aead_lwc,4.667,214.27,815,915,0,28.0
+sparkle_lwc,13.438,74.42,2996,1093,0,48.0
+elephant_lwc,19.950,50.13,5513,2472,0,9.0
+isap_lwc,6.093,164.12,2839,1651,0,77.0
+photonbeetle_lwc,8.131,122.99,2583,1090,0,21.0
+romulus_n_lwc,5.676,176.18,1859,1430,0,21.0

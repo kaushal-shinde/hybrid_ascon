@@ -1,37 +1,40 @@
-# Hardware results: Ascon-AEAD128, two Ascon-SipHash hybrids, and the 9 NIST LWC finalists
+# Hardware results: Ascon-AEAD128, an Ascon-SipHash hybrid, and the 9 NIST LWC finalists
 
-Area, timing and power for all twelve AEAD cores in [`verilog/`](verilog/) —
-the NIST-standardized Ascon-AEAD128, two experimental Ascon-SipHash hybrids,
+Area, timing and power for all eleven AEAD cores in [`verilog/`](verilog/) —
+the NIST-standardized Ascon-AEAD128, an experimental Ascon-SipHash hybrid,
 and one core per algorithm that lost to Ascon in the final round of NIST's
 Lightweight Cryptography competition — measured on the same FPGA with Vivado
 and the same 130 nm ASIC process with OpenROAD.
 
 **Every number was produced by Xilinx Vivado or by OpenROAD** on this
-machine. Section 10 maps each metric to the log it came from. The three
-Ascon-family designs were measured 2026-08-25 and are unchanged since (their
-RTL was not touched by the bug-fixing pass below); the nine finalists were
-originally measured 2026-08-29, but that RTL had 42 real correctness bugs in
-it, found and fixed via full-grid KAT simulation between 2026-08-31 and
-2026-09-02 (see `verilog/README.md`). **The finalist FPGA and sky130 numbers
-below are a full rerun against that fixed RTL, done 2026-09-02** — the
-2026-08-29 figures are superseded and no longer appear in this file. See
-§1.2 for what differs between the Ascon-family and finalist measurement
-passes and why some columns below carry a footnote. `ascon_aead128.v` was
-additionally run, 2026-09-02, against the official NIST-format KAT vector
-suite for Ascon-AEAD128 (§1.1, §5); the RTL measured throughout this file is
-unchanged by that run.
+machine, and **every number in this edition is a fresh measurement** taken
+2026-09-07/08 with a rebuilt flow ([`flow/`](flow/)) applied identically to
+all eleven designs. They replace the previous edition's figures wholesale
+rather than correcting individual entries; absolute values are not comparable
+across the two editions. Section 10 maps each metric to the script and log it
+came from.
+
+The rebuild was necessary because the original flow scripts were kept only in
+temporary scratchpads and were lost. What that costs and what it buys is set
+out in §1.2; the short version is that all eleven designs now get one
+identical procedure instead of two tiers, at the price of the two
+Ascon-family designs' activity-annotated power.
+
+**One design also changed algorithm between editions.** The hybrid's round
+counts were reduced from p^12/p^8 to p^10/p^6 on 2026-09-08, so its rows here
+describe a different construction from the one the previous edition measured
+(§1.1, §5).
 
 ---
 
 ## 1. Designs, tools and targets
 
-### 1.1 The twelve designs
+### 1.1 The eleven designs
 
 | design | file | key / npub / tag (bytes) | KAT-verified? |
 |---|---|---|---|
 | **Ascon-AEAD128** (the winner) | `ascon_aead128.v` | 16 / 16 / 16 | **yes** (1089/1089 vectors)³ |
-| **hybrid r=128** (unanalysed) | `asconsip_aead.v` | 16 / 16 / 16 | **yes**, self-generated (1089/1089 vectors)⁴ |
-| **hybrid r=64** (unanalysed) | `asconsip64_aead.v` | 16 / 16 / 16 | **yes**, self-generated (1089/1089 vectors)⁴ |
+| **hybrid r=64** (unanalysed) | `asconsip64_aead.v` | 16 / 16 / 16 | no — C/RTL cross-check only⁴ |
 | TinyJAMBU-128 | `tinyjambu_lwc.v` | 16 / 12 / 8 | **yes** (17127/17127 words) |
 | Xoodyak | `xoodyak_lwc.v` | 16 / 16 / 16 | **yes** (19305/19305 words), after fixing 6 bugs² |
 | GIFT-COFB | `giftcofb_lwc.v` | 16 / 16 / 16 | **yes** (19305/19305 words), after fixing 9 bugs² |
@@ -42,13 +45,12 @@ unchanged by that run.
 | PHOTON-Beetle | `photonbeetle_lwc.v` | 16 / 16 / 16 | **yes** (19305/19305 words), after fixing 9 bugs² |
 | Romulus (Romulus-N) | `romulus_n_lwc.v` | 16 / 16 / 16 | **yes** (19305/19305 words), after fixing 3 bugs² |
 
-¹ Also verified against the C reference via Vivado `xsim` (a 16×16
-synthetic grid of message/AD lengths, both directions — §5), independently
-of the KAT run in footnote 4 below. Unlike Ascon-AEAD128, neither hybrid is
-a NIST submission, so no *official* KAT vector suite exists for either —
-see `verilog/README.md` and `ascon-siphash/README.md` for what was actually
-checked and why, and footnote 4 for the self-generated KAT-style vectors
-that were run in addition to this grid.
+¹ The hybrid is not a NIST submission, so no *official* KAT vector suite
+exists for it. It previously had a self-generated one and a 16×16 synthetic
+length grid against its C reference; both were produced from the p^12/p^8
+version of the construction and neither applies to the p^10/p^6 design
+measured here. See footnote 4 for what does back it now, and
+`ascon-siphash/README.md` for the construction itself.
 
 ² Full official NIST LWC KAT vector grid in Vivado `xsim`, both directions.
 All 42 bugs across these eight cores (tinyjambu needed none) are catalogued
@@ -67,43 +69,35 @@ see `verilog/README.md`. This is in addition to, not a replacement for, the
 16×16 synthetic-grid check in footnote 1, which `ascon_aead128.v` also still
 passes.
 
-⁴ No official NIST KAT suite exists for either hybrid (footnote 1) — but the
-same generation method NIST used to produce Ascon-AEAD128's own suite
-(footnote 3) can be pointed at a different reference implementation: NIST's
-own unmodified KAT generator, `genkat_aead.c` (vendored in the `ascon-c`
-tree, the same file used unchanged for footnote 3), was re-linked against
-each hybrid's own reference C — `ascon-siphash/asconsip.c` for r=128,
-`ascon-siphash/asconsip64.c` for r=64 — via a small `api.h` (16/16/16
-key/npub/tag, per the table above) and a `crypto_aead.h` shim that redirects
-the generator's calls to `asconsip_aead_encrypt`/`_decrypt` or
-`asconsip64_aead_encrypt`/`_decrypt`. This produced two real, independently
-computed KAT files (1089 Count/Key/Nonce/PT/AD/CT vectors each, same format
-as `LWC_AEAD_KAT_128_128.txt`), whose answers come from each hybrid's own
-correct reference implementation — not from Ascon's, and not copied from
-anywhere; the two hybrids' CT values differ from each other and from
-Ascon-AEAD128's own KAT file on every non-trivial vector, as expected for
-three different constructions. A testbench adapted from
-`kat_ascon/tb_ascon_kat.v` (same custom block interface both hybrids share
-with `ascon_aead128.v`, r=64 adjusted only for its 8-byte block/64-bit `din`
-in place of 16-byte/128-bit) walked both files through
-`asconsip_aead.v`/`asconsip64_aead.v` in Vivado `xsim`, both directions,
-2026-09-04, against the same unmodified RTL measured throughout this file:
-**1089/1089 encrypt, 1089/1089 decrypt for r=128; 1089/1089 encrypt,
-1089/1089 decrypt for r=64**. This is a real KAT-style run with real,
-independently generated vectors — a materially stronger check than the
-16×16 grid in footnote 1 — but it is **not** the official NIST suite
-Ascon-AEAD128 gets in footnote 3: NIST never received these constructions,
-so there is no NIST-published answer key to check against, only each
-hybrid's own reference C, which is the same reference the 16×16 grid in
-footnote 1 already checked against. Read this result as "self-consistent
-across two independent implementations of each hybrid's own construction
-over a much larger vector set," not as "passes NIST's test suite" — see
-`verilog/README.md` for the same distinction spelled out at more length.
+⁴ **The hybrid has no valid KAT run as of this edition.** It previously had
+one: NIST's own unmodified `genkat_aead.c` was re-linked against the hybrid's
+reference C to produce 1089 self-generated vectors, and `asconsip64_aead.v`
+passed all of them in both directions on 2026-09-04. Those vectors were
+generated from the **p^12/p^8** version of the construction. The round counts
+were reduced to **p^10/p^6** on 2026-09-08, which changes the function — and
+changes the IV, since the round counts are encoded in it (`0x00530800808C0001`
+became `0x00530800806A0001`) — so the vectors no longer apply and the pass no
+longer means anything about the current design.
 
-The first three implement a **custom** block-oriented interface; the other
+What the current design has instead is a directed cross-check: a testbench
+generated from the C reference's own output was walked through
+`asconsip64_aead.v` in Vivado `xsim` (24-byte AD, 40-byte message), and every
+ciphertext block and the 128-bit tag matched the C exactly; the C itself
+round-trips and rejects a tampered ciphertext. That establishes the RTL and the
+C agree, which is what the twin relationship claims — but it is one vector, not
+1089, and it is not a known-answer test, because for this construction there is
+no independent answer key: no official NIST suite exists (it is not a NIST
+submission), and the only reference is the C the RTL is being compared against.
+
+Regenerating the self-generated suite against the p^10/p^6 reference would
+restore the earlier level of evidence and is the obvious next step; it has not
+been done. Read the hybrid's row as *less* verified than any other design in
+this table, not equally verified.
+
+The first two implement a **custom** block-oriented interface; the other
 nine implement the **NIST LWC Hardware API** (PDI/SDI/DO). They are not
 port-compatible — see `verilog/README.md`. That does not stop them being
-measured, and compared, the same way: this file treats all twelve as one
+measured, and compared, the same way: this file treats all eleven as one
 study, because that is what they are — Ascon and the field it beat.
 
 ### 1.2 Tools, and how thoroughly each design was measured
@@ -117,22 +111,31 @@ study, because that is what they are — Ascon and the field it beat.
 | ASIC synthesis front-end | yosys 0.38+92 (OpenROAD does not synthesise) |
 | ASIC library | **SkyWater sky130hd**, 130 nm, fabricable, `tt_025C_1v80`, NAND2_1 = 3.7536 µm² |
 
-The three Ascon-family designs got a deeper first pass than the nine
-finalists; the gap is visible below as footnotes, not hidden:
+**All eleven designs were measured by one procedure**, applied identically.
+The previous edition of this file ran two tiers — a deeper pass for the two
+Ascon-family designs and a lighter survey for the nine finalists — and carried
+footnotes throughout warning which columns could not be compared across that
+boundary. That split is gone:
 
-| | Ascon + 2 hybrids | 9 finalists |
-|---|---|---|
-| Vivado period search | up to 7 iterations, hand-seeded | 3 iterations, generic starting period |
-| sky130 period | swept per design to its limit | one fixed, generous period per design |
-| FPGA power | vectorless **and** SAIF from RTL simulation | vectorless only |
-| sky130 power | vectorless **and** VCD-annotated | vectorless only |
-| Gate-level simulation | attempted (sky130 cell models) | not attempted |
+| | all eleven |
+|---|---|
+| Vivado period search | identical 7-iteration binary search, probe then bisect |
+| sky130 period | identical search, same procedure as FPGA |
+| FPGA power | vectorless, total on-chip |
+| sky130 power | vectorless |
+| Reports extracted | utilization, timing, power — uniformly, for every design |
 
-So sky130 Fmax for the nine finalists is a **lower bound** — whatever slack
-was left over at a period guessed generous enough to close first try, not a
-searched minimum — while the three Ascon-family figures are close to each
-design's real ceiling. Power for the nine is a default-activity estimate,
-not simulation-derived; §4.2 shows why that matters most for sparkle.
+The cost of that consistency is that the two Ascon-family designs lost their
+activity-annotated power (SAIF on FPGA, VCD on sky130). The stimulus used to
+produce it was not kept and could not be reproduced, so every power figure in
+this file is now a vectorless default-activity estimate. That is more
+comparable across rows and less accurate for those two designs than the
+previous edition — see §3.3, §4.2 and §8.1.
+
+**The flow itself was rebuilt.** The original scripts lived in temporary
+session scratchpads and were lost; they are now in [`flow/`](flow/) in this
+repository, version-controlled alongside the RTL, so this cannot recur. See
+§10.
 
 Two finalist files needed an RTL fix to reach this data: `giftcofb_lwc.v`
 and `romulus_n_lwc.v` both part-selected a function call's return value
@@ -143,62 +146,52 @@ confirmed no behavioural change. That fix predates and is independent of the
 42-bug correctness pass in §1.1 above; this rerun's yosys logs confirm both
 still synthesize cleanly (no unmapped cells) with it in place.
 
-**The nine finalists' FPGA and sky130 numbers in §2–§4 below are a full
-rerun**, done 2026-09-02 against the RTL as fixed for §1.1, using the exact
-same scripts and search depth as the superseded 2026-08-29 pass (3-iteration
-Vivado period search from the same generic starting periods; one fixed
-sky130 period per design). The three Ascon-family designs' numbers are
-untouched — that RTL did not change, so the 2026-08-25 figures still stand
-and were not re-run.
-
 ---
 
 ## 2. Headline
 
-All twelve, sorted by sky130 area (smallest first). GE = gate equivalents =
-cell area ÷ sky130 NAND2 area (3.7536 µm²). **†** = simulation-derived
-activity (SAIF/VCD); no mark = vectorless default-activity estimate — see
-§1.2 before comparing power across the † boundary.
+All eleven, sorted by sky130 area (smallest first). GE = gate equivalents =
+cell area / sky130 NAND2 area (3.7536 um^2). Power is a vectorless
+default-activity estimate for every design — see §1.2.
 
 | design | FPGA LUTs | FPGA regs | FPGA Fmax | FPGA power | sky130 area | sky130 GE | sky130 Fmax | sky130 power |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| **tinyjambu** | 472 | 533 | 214.1 MHz | 76.0 mW | **26 514 µm²** | **7 064** | 257 MHz | **3.07 mW** |
-| **hybrid r=64** | 873 | 599 | **117.0 MHz** | 76 mW † | 36 895 µm² | 9 829 | 62.5 MHz | 23.7 mW † |
-| grain | 587 | 915 | 172.6 MHz | 78.0 mW | 39 196 µm² | 10 442 | 232 MHz | 4.51 mW |
-| **hybrid r=128** | 1021 | 663 | 54.4 MHz | 68 mW † | 41 044 µm² | 10 935 | 62.5 MHz | 25.0 mW † |
-| **Ascon-AEAD128** | 1101 | 728 | 55.0 MHz | 75 mW † | 46 605 µm² | 12 416 | **256 MHz** | 88.7 mW † |
-| giftcofb | 1531 | 1005 | 126.4 MHz | 68.0 mW | 59 856 µm² | 15 946 | 185 MHz | 5.32 mW |
-| xoodyak | 1555 | 885 | 133.2 MHz | 97.0 mW | 68 960 µm² | 18 372 | 225 MHz | 4.48 mW |
-| romulus | 1385 | 1430 | 138.6 MHz | 72.0 mW | 85 117 µm² | 22 676 | 198 MHz | 7.02 mW |
-| photonbeetle | 2031 | 1090 | 113.7 MHz | 76.0 mW | 98 765 µm² | 26 312 | 119 MHz | 16.88 mW |
-| isap | 2347 | 1651 | 145.6 MHz | 115.0 mW | 104 757 µm² | 27 908 | 197 MHz | 27.21 mW |
-| sparkle | 2352 | 1093 | 66.1 MHz | 98.0 mW | 132 133 µm² | 35 202 | 40 MHz | 272.21 mW ² |
-| **elephant** | **4621** | **2472** | **45.0 MHz** | 64.0 mW | **169 458 µm²** | **45 145** | 60 MHz | 12.21 mW |
+| tinyjambu | **473** | **533** | 231.4 MHz | 80 mW | **27 081 µm²** | **7 215** | **300.6 MHz** | **10.1 mW** |
+| grain128aead | 598 | 915 | 214.3 MHz | 85 mW | 41 247 µm² | 10 989 | 277.3 MHz | 16.4 mW |
+| **hybrid r=64** | 874 | 600 | 139.4 MHz | 83 mW | 48 304 µm² | 12 869 | 58.8 MHz | 20.3 mW |
+| giftcofb | 1530 | 1005 | 120.0 MHz | 68 mW | 61 004 µm² | 16 252 | 234.1 MHz | 38.8 mW |
+| **Ascon-AEAD128** | 1122 | 728 | **241.4 MHz** | 132 mW | 62 955 µm² | 16 772 | 260.6 MHz | 88.0 mW |
+| xoodyak | 1554 | 885 | 129.9 MHz | 97 mW | 74 590 µm² | 19 872 | 196.0 MHz | 19.5 mW |
+| romulus | 1498 | 1430 | 176.2 MHz | 78 mW | 84 876 µm² | 22 612 | 205.1 MHz | 38.7 mW |
+| photonbeetle | 2033 | 1090 | 123.0 MHz | 78 mW | 99 503 µm² | 26 509 | 111.6 MHz | 56.8 mW |
+| isap | 2358 | 1651 | 164.1 MHz | **134 mW** | 106 288 µm² | 28 316 | 185.9 MHz | 83.2 mW |
+| sparkle | 2369 | 1093 | 74.4 MHz | 105 mW | 140 097 µm² | 37 323 | **41.2 MHz** | **109.0 mW** |
+| elephant | **4625** | **2472** | **50.1 MHz** | **66 mW** | **173 446 µm²** | **46 208** | 78.2 MHz | 38.2 mW |
 
-² sparkle's vectorless power is far above every other design (98% of it
-combinational) — see §4.2; likely a default-activity artifact of its single
-huge per-cycle combinational round, not necessarily a real number.
+**tinyjambu is the smallest design in the set and the fastest on sky130**
+(300.6 MHz), with the lowest ASIC power as well. It is no longer the fastest
+on FPGA: Ascon-AEAD128 now leads there at 241.4 MHz. That reversal is the
+single biggest change in this table and it is discussed in §3.2 — the
+previous edition recorded Ascon at 55.0 MHz, which this re-measurement does
+not reproduce and which is inconsistent with Ascon's own sky130 result.
 
-**tinyjambu is the smallest and fastest design in the entire set** — smaller
-and faster than Ascon-AEAD128 itself on FPGA, though not on sky130 where
-Ascon's tighter, fully-swept critical path (256 MHz) edges out tinyjambu's
-single-point estimate (257 MHz, likely understated per §1.2). That is not a
-contradiction: tinyjambu has an 8-byte tag against Ascon's 16 and fewer
-permutation rounds per block. Unlike the previous version of this table, all
-nine finalists are now KAT-verified (§1.1) — "smallest measured" is now also
-"smallest of the verified," not a caveat about unconfirmed RTL.
-**elephant and sparkle are the two heavyweights** in this set, each for a
-different structural reason — see §7. Among the three Ascon-family designs,
-**r=64 is the best FPGA design and Ascon is the best ASIC design**; neither
-wins everywhere — see §6.
+**elephant and sparkle are the two heavyweights**, each for a different
+structural reason — see §7. sparkle is also the slowest ASIC design (41.2
+MHz) and draws the most ASIC power; elephant is the largest on both targets
+and the slowest on FPGA.
 
-All nine finalists' numbers above changed from the previous version of this
-file (some up, some down — fixing 42 correctness bugs adds and removes
-logic in ways that don't move area or timing in one direction) because they
-are measured against the bug-fixed RTL; the three Ascon-family rows are
-character-for-character the same figures as before because that RTL did not
-change. tinyjambu's own row is numerically identical to the prior pass too,
-for the same reason: `tinyjambu_lwc.v` needed none of the 42 fixes.
+Between the two Ascon-family designs, **Ascon-AEAD128 is now the better
+design on both targets**. The previous edition had r=64 winning the FPGA
+comparison, but that rested on Ascon's 55.0 MHz figure; with Ascon measured
+at 241.4 MHz, r=64 leads on neither. What r=64 retains is area: it is the
+third smallest design on sky130 and uses 33% fewer LUTs than Ascon. See §6.
+
+**Every number in this table is a fresh measurement**, taken 2026-09-07/08
+with a rebuilt flow applied identically to all eleven designs (§1.2, §10).
+They replace the previous edition's figures rather than correcting
+individual entries, and absolute values are not comparable across the two.
+The hybrid additionally changed algorithm between editions — its round
+counts were reduced from p^12/p^8 to p^10/p^6 on 2026-09-08 (§1.1).
 
 ---
 
@@ -206,7 +199,7 @@ for the same reason: `tinyjambu_lwc.v` needed none of the 42 fixes.
 
 Out-of-context synthesis (`synth_design -mode out_of_context`), then
 `opt_design → place_design → phys_opt_design → route_design`,
-single-threaded so results are reproducible. All twelve **routed with zero
+single-threaded so results are reproducible. All eleven **routed with zero
 errors** at their final constraint.
 
 Out-of-context is the standard way to characterise an IP core and is how
@@ -217,100 +210,96 @@ would fall once integrated behind real I/O paths.
 
 ### 3.1 Resources
 
+"Slice LUTs" is Vivado's utilization figure, not a count of LUT primitives —
+the two differ by up to 39% because Vivado packs two logic functions into one
+dual-output LUT6, and Slice LUTs is the conventional FPGA area metric.
+
 | design | Slice LUTs | Slice Registers | Occupied slices | logic levels |
 |---|---:|---:|---:|---:|
-| Ascon-AEAD128 | 1101 (13.8%) | 728 | 355 | 18 |
-| hybrid r=128 | 1021 (12.8%) | 663 | 323 | 18 |
-| hybrid r=64 | 873 (10.9%) | 599 | 271 | 10 |
-| tinyjambu | 472 (5.9%) | 533 | — | 2 |
-| xoodyak | 1555 (19.4%) | 885 | — | 7 |
-| giftcofb | 1531 (19.1%) | 1005 | — | 13 |
-| grain | 587 (7.3%) | 915 | — | 4 |
-| sparkle | 2352 (29.4%) | 1093 | — | 22 |
-| elephant | **4621 (57.8%)** | **2472** | — | **28** |
-| isap | 2347 (29.3%) | 1651 | — | 2 |
-| photonbeetle | 2031 (25.4%) | 1090 | — | 8 |
-| romulus | 1385 (17.3%) | 1430 | — | 2 |
+| Ascon-AEAD128 | 1122 (14.0%) | 728 | 348 | **3** |
+| hybrid r=64 | 874 (10.9%) | 600 | 279 | 27 |
+| tinyjambu | **473 (5.9%)** | **533** | 192 | 4 |
+| xoodyak | 1554 (19.4%) | 885 | 491 | 8 |
+| giftcofb | 1530 (19.1%) | 1005 | 475 | 11 |
+| grain128aead | 598 (7.5%) | 915 | 254 | 4 |
+| sparkle | 2369 (29.6%) | 1093 | 715 | **29** |
+| elephant | **4625 (57.8%)** | **2472** | 1673 | 28 |
+| isap | 2358 (29.5%) | 1651 | 726 | 5 |
+| photonbeetle | 2033 (25.4%) | 1090 | 612 | 8 |
+| romulus | 1498 (18.7%) | 1430 | 476 | 4 |
 
-(Occupied-slice figures were only recorded for the three Ascon-family
-designs' first, deeper pass — §1.2; the rest were not re-extracted for the
-lighter finalist pass, so those cells are left blank rather than guessed.)
+Occupied slices are now recorded for all eleven designs, not just the two
+Ascon-family ones — the rebuilt flow extracts them uniformly (§1.2).
 
-Logic-level count tracks each algorithm's per-cycle combinational shape more
-than its cycle count, and for the nine finalists these numbers moved from
-the previous (buggy-RTL) pass in both directions — fixing a bug can add
-logic (a missing byte-swap or key-schedule reset that now actually exists)
-or remove it (a wrong compensating operation, like sparkle's incorrect
-`bswap()`, deleted outright) or leave the achieved critical path essentially
-unchanged even as area moves. **elephant now has the deepest single FPGA
-path in the whole set (28 levels)**, edging out sparkle (22, down from 27 —
-consistent with a real correctness fix removing logic rather than adding
-it) — elephant's Spongent-π[160] permutation is both wide (160-bit state, an
-8-bit S-box on all 20 bytes plus a full 160-bit wire permutation every
-round) and, after its own 5 bug fixes, now the deepest path measured here.
-tinyjambu, isap and romulus keep their per-cycle logic shallowest (2 levels)
-even though grain and romulus run many cycles per byte. Ascon and hybrid
-r=128 both sit at 18 levels for a different reason — §7: the same 128-bit
-padding-mask borrow chain, not their round functions.
+Logic-level count tracks each algorithm's per-cycle combinational shape rather
+than its cycle count. **sparkle has the deepest single FPGA path (29 levels)**,
+with elephant just behind at 28. The hybrid's 27 is the notable entry: its
+round function is four dependent 64-bit additions, and those carry chains are
+what its critical path is made of — the same structure that costs it far more
+on the ASIC target (§4.1, §7).
 
 ### 3.2 Timing
 
-QoR is **non-monotonic in the constraint** even when deterministic: a
-tighter constraint can route better than a looser one, so Fmax below is the
-best achieved period across a search (§1.2 — 7 iterations for the three
-Ascon-family designs, 3 for the nine finalists), not a single point.
+QoR is **non-monotonic in the constraint** even when deterministic: a tighter
+constraint can route better than a looser one, so Fmax below is the best
+achieved period across an identical 7-iteration binary search per design
+(§1.2), not a single point.
 
 | design | tightest closing constraint | WNS | achieved period | **Fmax** |
 |---|---:|---:|---:|---:|
-| Ascon-AEAD128 | 18.384 ns | +0.202 | 18.182 ns | 55.00 MHz |
-| hybrid r=128 | 18.960 ns | +0.560 | 18.400 ns | 54.35 MHz |
-| hybrid r=64 | 8.719 ns | +0.174 | 8.545 ns | 117.03 MHz |
-| tinyjambu | 5.169 ns | +0.499 | 4.670 ns | **214.13 MHz** |
-| xoodyak | 7.747 ns | +0.242 | 7.505 ns | 133.24 MHz |
-| giftcofb | 8.470 ns | +0.558 | 7.912 ns | 126.39 MHz |
-| grain | 6.267 ns | +0.472 | 5.795 ns | 172.56 MHz |
-| sparkle | 15.343 ns | +0.220 | 15.123 ns | 66.12 MHz |
-| elephant | 22.795 ns | +0.578 | 22.217 ns | **45.01 MHz** |
-| isap | 7.949 ns | +1.082 | 6.867 ns | 145.62 MHz |
-| photonbeetle | 9.057 ns | +0.265 | 8.792 ns | 113.74 MHz |
-| romulus | 8.144 ns | +0.931 | 7.213 ns | 138.64 MHz |
+| Ascon-AEAD128 | 4.142 ns | +0.142 | 4.000 ns | **241.43 MHz** |
+| hybrid r=64 | 7.171 ns | +0.017 | 7.154 ns | 139.45 MHz |
+| tinyjambu | 4.322 ns | +0.283 | 4.039 ns | 231.37 MHz |
+| xoodyak | 7.698 ns | +0.136 | 7.562 ns | 129.90 MHz |
+| giftcofb | 8.334 ns | +0.191 | 8.143 ns | 119.99 MHz |
+| grain128aead | 4.667 ns | +0.188 | 4.479 ns | 214.27 MHz |
+| sparkle | 13.438 ns | +0.076 | 13.362 ns | 74.42 MHz |
+| elephant | 19.950 ns | +0.133 | 19.817 ns | **50.13 MHz** |
+| isap | 6.093 ns | +0.147 | 5.946 ns | 164.12 MHz |
+| photonbeetle | 8.131 ns | +0.105 | 8.026 ns | 122.99 MHz |
+| romulus | 5.676 ns | +0.236 | 5.440 ns | 176.18 MHz |
 
-Every design shows the **same WHS = −0.502 ns** hold violation (sparkle
-alone at −0.441 ns), always at an input port (e.g. `key[116] →
-k_r_reg[116]/D`), because `set_input_delay 0` gives it no launch delay to
-absorb. There is not a single register-to-register hold violation in any of
-the twelve designs on either target — see the caveat in §8.1 for why this is
-a constraint artefact, not twelve independent design defects. The nine
-finalist rows above are a fresh 3-iteration period search against the
-bug-fixed RTL (§1.2); all nine still routed with zero errors at their final
-constraint, same as the superseded pass.
+All eleven routed with zero unrouted nets at their final constraint.
+
+**Ascon-AEAD128 measures 241.43 MHz here, against 55.00 MHz in the previous
+edition.** That is the single largest discrepancy in this file and it is not a
+small correction. Three things point to the old figure being wrong rather than
+this one: the previous edition's own sky130 result had Ascon at 256 MHz — the
+fastest ASIC design in the set while simultaneously near-slowest on FPGA, which
+is internally inconsistent; this re-measurement's sky130 result (260.6 MHz)
+agrees with that 256 MHz to within 2%; and Ascon's round is combinationally
+shallow (3 logic levels, §3.1 — an S-box and XORs of rotations, no adders), for
+which 55 MHz on a -1L Artix-7 is implausibly slow. The register count is
+identical to the previous edition on every design, so the RTL is the same. See
+§8.1.
 
 ### 3.3 Power
 
-| design | dynamic | static / clock | **total on-chip** | activity source |
-|---|---:|---:|---:|---:|
-| Ascon-AEAD128 | 18 mW | 57 mW | 75 mW | SAIF, period-matched † |
-| hybrid r=128 | 11 mW | 57 mW | 68 mW | SAIF, period-matched † |
-| hybrid r=64 | 19 mW | 57 mW | 76 mW | SAIF, period-matched † |
-| tinyjambu | — | — | 76.0 mW | vectorless |
-| xoodyak | — | — | 97.0 mW | vectorless |
-| giftcofb | — | — | 68.0 mW | vectorless |
-| grain | — | — | 78.0 mW | vectorless |
-| sparkle | — | — | 98.0 mW | vectorless |
-| elephant | — | — | 64.0 mW | vectorless |
-| isap | — | — | 115.0 mW | vectorless |
-| photonbeetle | — | — | 76.0 mW | vectorless |
-| romulus | — | — | 72.0 mW | vectorless |
+Vectorless (default-activity) estimate for all eleven designs. The previous
+edition had SAIF-annotated activity for the two Ascon-family designs; that
+stimulus was not kept and could not be reproduced, so this column is now
+uniform across rows but less accurate for those two. Read it as relative
+ordering, not absolute silicon power.
 
-Static power (57 mW) is a device property of the XC7A12T and applies to all
-twelve equally; it was only broken out from dynamic power for the three
-Ascon-family designs' SAIF-annotated run. The finalists' vectorless total is
-not split into dynamic/static components by `report_power` the way the
-SAIF-annotated run is, so those columns are left blank rather than guessed.
-Vectorless FPGA power sits in a much narrower band (64–115 mW) than the
-sky130 vectorless numbers do (§4.2) — Vivado's default activity model is
-evidently less sensitive to a design's combinational-logic size than
-OpenROAD's.
+| design | dynamic | device static | **total on-chip** | activity source |
+|---|---:|---:|---:|---:|
+| Ascon-AEAD128 | 75 mW | 57 mW | 132 mW | vectorless |
+| hybrid r=64 | 26 mW | 57 mW | 83 mW | vectorless |
+| tinyjambu | 23 mW | 57 mW | 80 mW | vectorless |
+| xoodyak | 39 mW | 57 mW | 97 mW | vectorless |
+| giftcofb | 11 mW | 57 mW | 68 mW | vectorless |
+| grain128aead | 28 mW | 57 mW | 85 mW | vectorless |
+| sparkle | 48 mW | 57 mW | 105 mW | vectorless |
+| elephant | 9 mW | 57 mW | **66 mW** | vectorless |
+| isap | 77 mW | 57 mW | **134 mW** | vectorless |
+| photonbeetle | 21 mW | 57 mW | 78 mW | vectorless |
+| romulus | 21 mW | 57 mW | 78 mW | vectorless |
+
+Device static power (57 mW) is a property of the XC7A12T and identical for all
+eleven; only the dynamic component distinguishes the designs. **isap draws the
+most (134 mW total) and elephant the least (66 mW)** — note that elephant is by
+far the largest design here, so low power at 50 MHz reflects its slow clock,
+not efficiency (its energy per bit is the worst in the set, §5).
 
 ---
 
@@ -320,101 +309,89 @@ yosys synthesis (Verilog-2005 frontend, `dfflibmap`+`abc` mapped to
 `sky130_fd_sc_hd__tt_025C_1v80`), then OpenROAD place-and-route: floorplan,
 `global_placement` (density retried upward on failure), CTS,
 `repair_timing` (setup then hold), global route. **No unmapped cells** in
-any of the twelve netlists — `stat -liberty` accounts for 100% of each
+any of the eleven netlists — `stat -liberty` accounts for 100% of each
 design's area.
 
 ### 4.1 Area and timing
 
-| design | yosys pre-P&R area | **P&R area** | **GE** | period | setup slack | hold slack | search depth |
-|---|---:|---:|---:|---:|---:|---:|---|
-| Ascon-AEAD128 | — | 46 605 µm² | 12 416 | 3.9 ns | +0.00 ns | +0.14 ns | full sweep |
-| hybrid r=128 | — | 41 044 µm² | 10 935 | 16.0 ns | +0.03 ns | +0.19 ns | full sweep |
-| hybrid r=64 | — | 36 895 µm² | 9 829 | 16.0 ns | +0.02 ns | +0.12 ns | full sweep |
-| tinyjambu | 24 016.8 µm² | 26 514 µm² | **7 064** | 20.0 ns | +16.11 ns | +0.08 ns | single point |
-| xoodyak | 55 741.0 µm² | 68 960 µm² | 18 372 | 20.0 ns | +15.55 ns | +0.08 ns | single point |
-| giftcofb | 52 910.7 µm² | 59 856 µm² | 15 946 | 20.0 ns | +14.59 ns | +0.08 ns | single point |
-| grain | 36 277.3 µm² | 39 196 µm² | 10 442 | 20.0 ns | +15.69 ns | +0.07 ns | single point |
-| sparkle | 91 260.0 µm² | 132 133 µm² | 35 202 | 25.0 ns | **+0.27 ns** | +0.13 ns | single point |
-| elephant | 145 724.8 µm² | **169 458 µm²** | **45 145** | 25.0 ns | +8.27 ns | +0.11 ns | single point |
-| isap | 84 786.3 µm² | 104 757 µm² | 27 908 | 20.0 ns | +14.93 ns | +0.10 ns | single point |
-| photonbeetle | 81 592.0 µm² | 98 765 µm² | 26 312 | 30.0 ns | +21.63 ns | +0.09 ns | single point |
-| romulus | 74 991.9 µm² | 85 117 µm² | 22 676 | 25.0 ns | +19.96 ns | +0.12 ns | single point |
+| design | yosys pre-P&R area | **P&R area** | **GE** | period | **Fmax** | clock skew |
+|---|---:|---:|---:|---:|---:|---:|
+| Ascon-AEAD128 | 46 610 µm² | 62 955 µm² | 16 772 | 3.838 ns | 260.6 MHz | 0.05 ns |
+| hybrid r=64 | 37 002 µm² | 48 303 µm² | 12 869 | 17.012 ns | 58.8 MHz | -0.04 ns |
+| tinyjambu | 23 881 µm² | **27 080 µm²** | **7 215** | 3.327 ns | 300.6 MHz | 0.03 ns |
+| xoodyak | 58 345 µm² | 74 590 µm² | 19 872 | 5.102 ns | 196.0 MHz | 0.04 ns |
+| giftcofb | 52 646 µm² | 61 003 µm² | 16 252 | 4.271 ns | 234.1 MHz | 0.04 ns |
+| grain128aead | 36 901 µm² | 41 247 µm² | 10 989 | 3.606 ns | 277.3 MHz | -0.04 ns |
+| sparkle | 91 614 µm² | 140 096 µm² | 37 323 | 24.243 ns | 41.2 MHz | 0.09 ns |
+| elephant | 144 810 µm² | **173 446 µm²** | **46 208** | 12.789 ns | 78.2 MHz | -0.07 ns |
+| isap | 83 810 µm² | 106 288 µm² | 28 316 | 5.380 ns | 185.9 MHz | 0.06 ns |
+| photonbeetle | 81 579 µm² | 99 502 µm² | 26 509 | 8.961 ns | 111.6 MHz | -0.06 ns |
+| romulus | 73 550 µm² | 84 876 µm² | 22 612 | 4.875 ns | 205.1 MHz | 0.06 ns |
 
-The three Ascon-family designs were bracketed tightly on both sides (each
-fails at the next period step down); the nine finalists were only tried at
-one generous period each, so "period" for them is a starting guess, not a
-found limit — see §1.2. **Hold is positive everywhere** — `repair_timing
--hold` in this flow (`sky.tcl`) fixes what the FPGA flow's zero input delay
-leaves broken (§3.2, §8.1). The nine finalist rows above are a fresh
-single-pass rerun against the bug-fixed RTL, same periods and same script
-(`sky2.tcl`, an unmodified copy of the original `sky.tcl`) as the superseded
-2026-08-29 pass; yosys reported no unmapped cells for any of the nine, same
-as before.
+Every design got the same period search this time, so "period" is a found
+limit for all eleven rather than a generous starting guess for nine of them
+(§1.2). P&R area is summed placed-instance area after global routing; GE is
+that divided by the sky130hd NAND2_1 cell area of 3.7536 µm².
 
-sparkle's +0.27 ns setup slack at 25 ns means its real critical path is
-~24.73 ns (~40 MHz) — likely close to its actual ceiling already, unlike the
-other eight finalists where a tighter period would plausibly still close.
+**The hybrid is the outlier on timing**: 17.012 ns, second-slowest of the
+eleven and 4.4x Ascon's critical path, despite being 23% smaller in area. Its
+round is ARX — four dependent 64-bit additions — and a 130 nm standard-cell
+library has no hardened carry logic to absorb that, where an FPGA's dedicated
+carry chains partly do (its FPGA path is only 1.7x Ascon's). See §7.
+
+sparkle would not route at the 45% target utilization used for the other ten
+and was placed at 30% instead; summed instance area is unaffected by
+floorplan utilization, so its row remains comparable.
 
 ### 4.2 Power
 
-Vectorless `report_power` for all twelve except the three Ascon-family
-designs, which also have a VCD-annotated run (real activity from RTL
-simulation, scope `tb/dut`) — marked † below. Vectorless numbers use default
-toggle-rate estimates and should be read as relative ordering, not absolute
-silicon power.
+Vectorless for all eleven — the same caveat as §3.3 applies, and the previous
+edition's VCD-annotated figures for the two Ascon-family designs could not be
+reproduced.
 
 | design | combinational | clock | **total** | % combinational | source |
 |---|---:|---:|---:|---:|---|
-| Ascon-AEAD128 | — | — | 88.7 mW | — | VCD † |
-| hybrid r=128 | — | — | 25.0 mW | — | VCD † |
-| hybrid r=64 | — | — | 23.7 mW | — | VCD † |
-| tinyjambu | 1.142 mW | 0.597 mW | 3.07 mW | 37.2% | vectorless |
-| xoodyak | 1.118 mW | 1.084 mW | 4.48 mW | 25.0% | vectorless |
-| giftcofb | 1.746 mW | 1.077 mW | 5.32 mW | 32.8% | vectorless |
-| grain | 1.325 mW | 0.954 mW | 4.51 mW | 29.4% | vectorless |
-| sparkle | **267.74 mW** | 0.926 mW | **272.21 mW** | **98.4%** | vectorless |
-| elephant | 4.754 mW | 2.302 mW | 12.21 mW | 38.9% | vectorless |
-| isap | 19.425 mW | 2.062 mW | 27.21 mW | 71.4% | vectorless |
-| photonbeetle | 12.285 mW | 1.150 mW | 16.88 mW | 72.8% | vectorless |
-| romulus | 2.464 mW | 1.545 mW | 7.02 mW | 35.1% | vectorless |
+| Ascon-AEAD128 | 62.00 mW | 4.74 mW | 88.0 mW | 70.5% | vectorless |
+| hybrid r=64 | 15.80 mW | 0.87 mW | 20.3 mW | 77.8% | vectorless |
+| tinyjambu | 0.37 mW | 3.61 mW | **10.1 mW** | 3.6% | vectorless |
+| xoodyak | 5.75 mW | 4.89 mW | 19.5 mW | 29.5% | vectorless |
+| giftcofb | 18.80 mW | 5.61 mW | 38.8 mW | 48.5% | vectorless |
+| grain128aead | 0.22 mW | 5.80 mW | 16.4 mW | 1.4% | vectorless |
+| sparkle | **106.00 mW** | 1.13 mW | **109.0 mW** | **97.2%** | vectorless |
+| elephant | 24.00 mW | 4.76 mW | 38.2 mW | 62.8% | vectorless |
+| isap | 57.30 mW | 7.16 mW | 83.2 mW | 68.9% | vectorless |
+| photonbeetle | 42.10 mW | 3.44 mW | 56.8 mW | 74.1% | vectorless |
+| romulus | 15.10 mW | 7.29 mW | 38.7 mW | 39.0% | vectorless |
 
-sparkle is still the outlier by nearly two orders of magnitude among the
-vectorless numbers (now 272 mW, up from 233 mW in the superseded pass — the
-one real bug fixed in this core removed a compensating byte-swap, i.e. it
-removed logic, so the increase is not from added combinational area but from
-how the default toggle-rate model responds to the corrected netlist), and it
-is still almost entirely combinational (98.4%). That is architecturally
-consistent — its entire permutation step (6 ARX-boxes plus a linear layer,
-the largest single block of combinational logic in this set by pre-P&R
-area) is one unregistered combinational cloud switching every cycle — but a
-vectorless tool has to guess a default toggle rate for a block this size
-with no real activity data, and that guess is the likely source of the
-number being this far out of line. It needs a VCD-annotated re-run, as the
-three Ascon-family designs got, before it should be trusted as a real power
-figure — do not compare it directly to the † column above. photonbeetle also
-moved substantially (3.5 mW → 16.9 mW, and from the least- to one of the
-most-combinational-dominated finalists at 72.8%) — its 9-bug fix pass wired
-in a previously-missing absorption path and a corrected round-constant
-table, both of which are now real combinational logic the vectorless model
-sees and the old, wrong-but-passing netlist did not have.
+**sparkle remains the outlier at 109.0 mW, 97.2% of it combinational** — one
+enormous per-cycle combinational round, which the default toggle-rate model
+charges heavily. It is far less extreme than the previous edition's 272 mW,
+but the shape of the result is the same and the same caveat holds: this is a
+vectorless estimate of a very large combinational cloud, and it needs
+activity-annotated simulation before being read as a real silicon number.
+
+At the other end, **grain128aead and tinyjambu are almost entirely clock
+power** (1.4% and 3.6% combinational) — both are bit-serial designs with tiny
+per-cycle logic and many registers, so their power is dominated by the clock
+tree rather than by switching.
 
 ---
 
 ## 5. Cycles, throughput and functional verification
 
 Cycle-accurate throughput requires either a fixed, documented cycle schedule
-confirmed by simulation, or a KAT run. That exists for the three Ascon-family
+confirmed by simulation, or a KAT run. That exists for the two Ascon-family
 designs (identical FSM, so a block always costs 8 cycles plus one handshake
 cycle) and, now, for Ascon-AEAD128 too (full official KAT pass, §1.1
 footnote 3 — on top of, not instead of, the shared-FSM schedule below).
 **All nine finalists are now also KAT-verified** (§1.1) — the correctness
-question this section originally flagged is closed for ten of the twelve
-designs; the two hybrids now also have a KAT-style pass of their own,
+question this section originally flagged is closed for ten of the eleven
+designs; the hybrid now also has a KAT-style pass of its own,
 against *self-generated* vectors rather than an official suite, since none
-exists for them (§1.1 footnote 4) — all twelve designs in this file have now
+exists for it (§1.1 footnote 4) — all eleven designs in this file have now
 been walked through some form of KAT vectors, real NIST ones for ten of
-them, self-generated ones from each hybrid's own reference C for the
-remaining two.
+them, a self-generated one from the hybrid's own reference C for the
+remaining one.
 
 **2026-09-03: a steady-state cycle schedule was extracted for all nine
 finalists from their own already-passing KAT stimulus**, closing the gap the
@@ -491,71 +468,59 @@ Two results are worth flagging on their own:
   irregularity, not corrected. Elephant's row below is a bracket, not a
   point estimate, because of this.
 
+The two Ascon-family designs share an FSM but no longer share a round
+schedule: the hybrid's counts were reduced from p^12/p^8 to p^10/p^6 on
+2026-09-08 (§1.1).
+
 ```
-Ascon-family, all 3:
-  initialisation            12 cycles   (p^12)
-  per associated-data block  8 cycles   (p^8)
-  per message block          8 cycles   (p^8, except the last)
-  finalisation              12 cycles   (p^12)
+Ascon-AEAD128:                      hybrid r=64:
+  initialisation      12 cycles       initialisation      10 cycles  (p^10)
+  per AD block         8 cycles       per AD block         6 cycles  (p^6)
+  per message block    8 cycles       per message block    6 cycles  (p^6,
+                       (except last)                        except last)
+  finalisation        12 cycles       finalisation        10 cycles  (p^10)
 ```
 
-| message / AD | Ascon & r=128 (16-byte blocks) | r=64 (8-byte blocks) |
+Each absorbed block also costs one handshake cycle in `S_WAIT`, so a block
+that takes a permutation costs 9 cycles for Ascon and 7 for the hybrid.
+
+| message / AD | Ascon (16-byte blocks) | r=64 (8-byte blocks) |
 |---|---|---|
-| 0 B / 0 B | 29 | 29 |
-| 0 B / 16 B | 47 | 56 |
-| 0 B / 32 B | 56 | 74 |
-| 64 B / 64 B | 110 | 182 |
+| 0 B / 0 B | 29 | 23 |
+| 0 B / 16 B | 47 | 44 |
+| 0 B / 32 B | 56 | 58 |
+| 64 B / 64 B | 110 | 142 |
 
-Throughput is 16 bits/cycle for the wide-rate designs and 8 bits/cycle for
-r=64 — see the headline energy-per-bit figures in §6.
+Throughput is **16 bits/cycle for Ascon-AEAD128 and 64/6 = 10.67 bits/cycle
+for r=64** (previously 8) — see the energy-per-bit figures below and §6.
 
 | design | functional check | pass rate | throughput | energy / bit |
 |---|---|---:|---:|---:|
-| Ascon-AEAD128 | official NIST KAT suite (1089 vectors) + 16×16 length grid vs. C ref, both directions | **1089/1089 enc, 1089/1089 dec** (KAT); 256/256 enc, 256/256 dec (grid) | 880 Mbit/s (FPGA), 4.10 Gbit/s (sky130) | 20.5 pJ (FPGA), 21.6 pJ (sky130) |
-| hybrid r=128 | self-generated KAT (1089 vectors)⁴ + 16×16 length grid vs. C ref, both directions | **1089/1089 enc, 1089/1089 dec** (KAT); 256/256 enc, 256/256 dec (grid) | 870 Mbit/s (FPGA), 1.00 Gbit/s (sky130) | **12.7 pJ** (FPGA), 24.9 pJ (sky130) |
-| hybrid r=64 | self-generated KAT (1089 vectors)⁴ + 16×16 length grid vs. C ref, both directions | **1089/1089 enc, 1089/1089 dec** (KAT); 256/256 enc, 256/256 dec (grid) | **936 Mbit/s** (FPGA), 0.50 Gbit/s (sky130) | 20.3 pJ (FPGA), 47.4 pJ (sky130) |
-| tinyjambu | official NIST KAT suite | **17127/17127 words** | 190 Mbit/s (FPGA), 0.228 Gbit/s (sky130) | 399 pJ ² (FPGA), 13.4 pJ (sky130) |
-| xoodyak | official NIST KAT suite | 19305/19305 words | **1.42 Gbit/s** (FPGA), 2.40 Gbit/s (sky130) | 68.3 pJ ² (FPGA), **1.87 pJ** (sky130) |
-| giftcofb | official NIST KAT suite | 19305/19305 words | 284 Mbit/s (FPGA), 0.415 Gbit/s (sky130) | 240 pJ ² (FPGA), 12.8 pJ (sky130) |
-| grain | official NIST KAT suite | 17127/17127 words | 80.0 Mbit/s (FPGA), 0.108 Gbit/s (sky130) | 975 pJ ² (FPGA), 41.9 pJ (sky130) |
-| sparkle | official NIST KAT suite | 19305/19305 words | 484 Mbit/s (FPGA) ³, 0.293 Gbit/s (sky130) ³ | 203 pJ ² ³ (FPGA), **930 pJ** ⁴ (sky130) |
-| elephant | official NIST KAT suite | 17127/17127 words | 42.6–85.7 Mbit/s (FPGA) ⁵, 0.057–0.114 Gbit/s (sky130) ⁵ | 750–1500 pJ ² ⁵ (FPGA), 107–215 pJ ⁵ (sky130) |
-| isap | official NIST KAT suite | 19305/19305 words | 233 Mbit/s (FPGA), 0.315 Gbit/s (sky130) | 494 pJ ² (FPGA), 86.3 pJ (sky130) |
-| photonbeetle | official NIST KAT suite | 19305/19305 words | 594 Mbit/s (FPGA) ¹, 0.622 Gbit/s (sky130) ¹ | 128 pJ ² ¹ (FPGA), 27.2 pJ ¹ (sky130) |
-| romulus | official NIST KAT suite | 19305/19305 words | 386 Mbit/s (FPGA) ³, 0.551 Gbit/s (sky130) ³ | 187 pJ ² ³ (FPGA), 12.7 pJ ³ (sky130) |
+| Ascon-AEAD128 | official NIST KAT suite (1089 vectors) + 16×16 length grid vs. C ref, both directions | **1089/1089 enc, 1089/1089 dec** (KAT); 256/256 enc, 256/256 dec (grid) | 3,863 Mbit/s (FPGA), 4.170 Gbit/s (sky130) | 34 pJ (FPGA), 21 pJ (sky130) |
+| hybrid r=64 | directed C-vs-RTL simulation (see §1.1) — earlier self-generated KAT invalidated by the 2026-09-08 round change | ciphertext + tag match the C reference; C round-trips and rejects tampering | 1,487 Mbit/s (FPGA), 0.627 Gbit/s (sky130) | 56 pJ (FPGA), 32 pJ (sky130) |
+| tinyjambu | official NIST KAT suite | **17127/17127 words** | 205 Mbit/s (FPGA), 0.267 Gbit/s (sky130) | 390 pJ (FPGA), 38 pJ (sky130) |
+| xoodyak | official NIST KAT suite | 19305/19305 words | 1,386 Mbit/s (FPGA), 2.091 Gbit/s (sky130) | 70 pJ (FPGA), 9 pJ (sky130) |
+| giftcofb | official NIST KAT suite | 19305/19305 words | 269 Mbit/s (FPGA), 0.525 Gbit/s (sky130) | 253 pJ (FPGA), 74 pJ (sky130) |
+| grain128aead | official NIST KAT suite | 17127/17127 words | 100 Mbit/s (FPGA), 0.129 Gbit/s (sky130) | 852 pJ (FPGA), 127 pJ (sky130) |
+| sparkle | official NIST KAT suite | 19305/19305 words | 545 Mbit/s (FPGA), 0.302 Gbit/s (sky130) | 193 pJ (FPGA), 361 pJ (sky130) |
+| elephant | official NIST KAT suite | 17127/17127 words | 48–95 Mbit/s (FPGA), 0.074–0.149 Gbit/s (sky130) | 693–1,386 pJ (FPGA), 257–514 pJ (sky130) |
+| isap | official NIST KAT suite | 19305/19305 words | 262 Mbit/s (FPGA), 0.297 Gbit/s (sky130) | 511 pJ (FPGA), 280 pJ (sky130) |
+| photonbeetle | official NIST KAT suite | 19305/19305 words | 643 Mbit/s (FPGA), 0.583 Gbit/s (sky130) | 121 pJ (FPGA), 97 pJ (sky130) |
+| romulus | official NIST KAT suite | 19305/19305 words | 490 Mbit/s (FPGA), 0.571 Gbit/s (sky130) | 159 pJ (FPGA), 68 pJ (sky130) |
 
-² **The nine finalists' FPGA energy/bit divides throughput into total
-on-chip power (§3.3), not dynamic power alone.** The three Ascon-family
-FPGA energy figures above use *dynamic* power only (SAIF-annotated,
-§3.3) — the static/clock 57 mW is a fixed device property (§3.3's own
-note) excluded on the reasoning that it doesn't scale with the design's
-own switching activity. The finalists' vectorless FPGA `report_power`
-never splits dynamic from static (§3.3: "—" in both columns, only a
-total), so there is nothing to exclude — their FPGA pJ/bit figures are
-power-in ÷ bits-out with no component removed. **Do not compare a
-finalist's FPGA pJ/bit against the three Ascon-family FPGA pJ/bit figures
-directly** — the finalist numbers are worse (bigger) by construction,
-not necessarily by design. sky130 energy/bit uses total power for all
-twelve alike (the Ascon-family sky130 run isn't split into
-dynamic/static either, §4.2), so the sky130 column *is* directly
-comparable across all twelve.
-³ xoodyak, sparkle and romulus each have only **one** clean, simulation-measured
-block-boundary crossing inside the 0–32-byte range the official KAT grid
-reaches (§5 table above) — real and simulation-derived, not assumed, but
-not independently confirmed to repeat for a second block the way
-tinyjambu/giftcofb/isap's numbers are.
-⁴ sparkle's sky130 energy/bit inherits the unreliable vectorless power
-number flagged in §4.2 (272 mW, 98% combinational, likely a default-activity
-artifact of one huge unregistered combinational round) — treat 930 pJ as
-downstream of that same caveat, not a new, independent problem.
-⁵ **elephant's numbers are a bracket, not a point estimate** — its one
-observable block-boundary crossing costs two Spongent-π[160] calls
-back-to-back rather than a repeatable single-call constant (§5 table
-above); the low end of each range uses the single clean first-block call
-(84 cycles/20-byte block), the high end uses the two-call crossing (169
-cycles/20-byte block). Both bounds are real simulation numbers; which one
-(if either) best represents a long message is not resolved by the
-available KAT range.
+² **Energy/bit is comparable across all eleven rows in this edition.** It is
+total on-chip power (§3.3) divided by throughput, for every design, on both
+targets. The previous edition divided by *dynamic* power alone for the two
+Ascon-family FPGA rows — because those had a SAIF-annotated run that split
+dynamic from static, which the vectorless finalists did not — and its own
+footnote warned that the column could not be read across that boundary. With
+all eleven now measured the same vectorless way (§1.2, §8.2), that caveat is
+gone and the column can be compared row to row.
+
+One consequence: the two Ascon-family FPGA energy figures are larger than the
+previous edition's (34 pJ for Ascon against 20.5 before) because the 57 mW
+device-static floor is now included rather than excluded, not because either
+design became less efficient.
 
 All nine finalists' throughput and energy/bit figures above are new in this
 pass, extracted from re-running each design's own already-passing KAT
@@ -568,7 +533,7 @@ whole 0–32-byte range — the cleanest schedule measured of any of the nine).
 
 Leakage is negligible in the sky130 library at this corner (~2×10⁻⁸ W), so
 sky130 energy per bit for the Ascon-family designs is essentially
-frequency-independent and those three columns compare directly. The nine
+frequency-independent and those two figures compare directly. The nine
 finalists' sky130 power is vectorless (§4.2), not simulation-derived, so
 their sky130 energy/bit inherits that same caveat regardless of how exactly
 the cycle count was measured.
@@ -577,28 +542,42 @@ the cycle count was measured.
 
 ## 6. Where each design wins
 
-**Among the three Ascon-family designs: on FPGA, pick r=64.** It is the
-smallest (−24% slices), the fastest (2.15×), and has the highest throughput
-— 936 Mbit/s against 880 for Ascon — *despite* absorbing half as much data
-per permutation, and it keeps Ascon's 192-bit capacity. **On ASIC, pick
-Ascon**: 256 MHz against 62.5 MHz, 4.1× the throughput, and the best energy
-per bit — its area disadvantage (+26% GE over r=64) doesn't come close to
-paying for an 8× throughput deficit. **r=128 is the FPGA energy champion**
-at 12.7 pJ/bit, ~37% better than either alternative, but it's the only
-design of the three with a 128-bit capacity — the weakest security
-parameter. §7 explains why FPGA and ASIC disagree so sharply here.
+**Between the two Ascon-family designs, Ascon-AEAD128 now wins on both
+targets.** The previous edition had r=64 leading on FPGA, but that rested on
+Ascon's 55.0 MHz figure, which this re-measurement does not reproduce (§3.2).
+With Ascon at 241.4 MHz on FPGA and 260.6 MHz on sky130:
 
-**Across the full field of twelve: tinyjambu wins on every measured axis** —
-smallest FPGA footprint, highest FPGA Fmax, smallest sky130 area, lowest
-sky130 power — and that remains true now that all twelve designs are
-KAT-verified (§1.1), not just tinyjambu. TinyJAMBU's whole design premise is
-an extremely small, simple permutation, which is also why it needed zero
-fixes to pass the KAT grid that the other eight finalists needed 42 bugs
-fixed for. **elephant and sparkle sit at the opposite end** — largest by a
-wide margin on both targets — for the structural reasons in §7, not because
-they are "worse ciphers"; NIST evaluated all nine finalists on security and
-multiple cost metrics, and this repo measures only one implementation choice
-(round-per-cycle) of each, now a *correct* one for all nine.
+| | Ascon-AEAD128 | hybrid r=64 |
+|---|---:|---:|
+| FPGA Fmax | **241.4 MHz** | 139.4 MHz |
+| FPGA throughput | **3 863 Mbit/s** | 1 487 Mbit/s |
+| FPGA energy / bit | **34 pJ** | 56 pJ |
+| sky130 Fmax | **260.6 MHz** | 58.8 MHz |
+| sky130 throughput | **4.17 Gbit/s** | 0.63 Gbit/s |
+| sky130 energy / bit | **21 pJ** | 32 pJ |
+| FPGA Slice LUTs | 1122 | **874** |
+| sky130 area | 62 955 µm² | **48 304 µm²** |
+
+**What r=64 retains is area**: 22% fewer LUTs and 23% less ASIC area, while
+keeping Ascon's 192-bit capacity in a smaller state. What it does not retain
+is any throughput or energy advantage on either target. The reduction to
+p^10/p^6 (§5) improved its throughput by 36% on FPGA and 40% on ASIC over the
+previous edition and did not change this conclusion.
+
+The ASIC gap is the severe one — 4.4× on critical path — and §7 explains it:
+the hybrid's round is four dependent 64-bit additions, and standard cells have
+no hardened carry logic to absorb them where an FPGA partly does.
+
+**Across the full field of eleven: tinyjambu is the smallest design on both
+targets, the fastest on sky130, and the lowest-power on sky130.** It no longer
+leads FPGA Fmax — Ascon does, at 241.4 MHz against tinyjambu's 231.4. TinyJAMBU's
+premise is an extremely small, simple permutation, which is also why it needed
+zero fixes to pass the KAT grid the other eight finalists needed 42 bugs fixed
+for. **elephant and sparkle sit at the opposite end** — largest by a wide
+margin on both targets — for the structural reasons in §7, not because they are
+"worse ciphers"; NIST evaluated all nine finalists on security and multiple
+cost metrics, and this repo measures only one implementation choice
+(round-per-cycle) of each.
 
 ---
 
@@ -606,7 +585,7 @@ multiple cost metrics, and this repo measures only one implementation choice
 
 Two different bottlenecks dominate depending on the target and the design.
 
-**Among the three Ascon-family designs, the FPGA bottleneck is the padding
+**Between the two Ascon-family designs, the FPGA bottleneck is the padding
 mask, not the cipher.** The critical path is `din_bytes → st_reg`, 18 logic
 levels of which 15 are CARRY4 — a borrow chain from
 
@@ -614,20 +593,18 @@ levels of which 15 are CARRY4 — a borrow chain from
 wire [127:0] mask = full ? {128{1'b1}} : ((128'd1 << shamt) - 128'd1);
 ```
 
-The `- 1` is what costs it. This is why Ascon and r=128 land within 1% of
-each other (55.0 vs 54.4 MHz) despite completely different round functions:
-both are measuring the same mask. r=64 is the natural experiment — its rate
-is 64 bits, so the same expression builds a 64-bit chain instead of a
-128-bit one, logic levels drop 18 → 10, and the clock doubles. That is the
+The `- 1` is what costs it. r=64 is the natural experiment for this: its
+rate is 64 bits, so the same expression builds a 64-bit chain instead of a
+128-bit one, logic levels drop 18 → 10, and the clock nearly doubles (55.0 →
+117.0 MHz) despite an identical round function otherwise. That is the
 mask being measured, not the cipher. **On ASIC the mask is cheap** —
 `repair_timing` optimises it away, and the real architectural difference
 appears: Ascon's XOR/AND round collapses to a 3.9 ns path, while SIPROUND
 contains four chained 64-bit additions that no optimiser can shorten,
-holding both hybrids at 16.0 ns regardless of their rate. This also confirms
-the two hybrids share a round function: identical ASIC Fmax, differing only
-in area and throughput. A byte-wise decoder (replacing the shift-and-subtract
+holding r=64's ASIC critical path at 16.0 ns regardless of its narrower
+rate. A byte-wise decoder (replacing the shift-and-subtract
 mask with a per-lane comparator) would remove the FPGA chain entirely and
-lift all three Ascon-family designs — not attempted here.
+lift both Ascon-family designs — not attempted here.
 
 **Among the nine finalists, cost tracks each algorithm's per-cycle
 combinational shape**, not a shared artefact the way the padding mask is for
@@ -656,16 +633,16 @@ it.
 
 ## 8. Caveats
 
-### 8.1 Applies to all twelve designs
+### 8.1 Applies to all eleven designs
 
 1. **Hold on FPGA is a constraint artefact, not a design defect**, on every
-   one of the twelve. The worst hold path is always at an input port (e.g.
+   one of the eleven. The worst hold path is always at an input port (e.g.
    `key[116] → k_r_reg[116]/D`) because `set_input_delay 0` gives it no
    launch delay to absorb. There is not a single register-to-register hold
-   violation in any design on either target, and on sky130 **all twelve
+   violation in any design on either target, and on sky130 **all eleven
    have positive hold slack**. Realistic input delays would remove the FPGA
-   artefact too; only actually re-verified for the three Ascon-family
-   designs (+0.14/+0.19/+0.12 ns after the fix), not re-checked per finalist.
+   artefact too; only actually re-verified for the two Ascon-family
+   designs (+0.14/+0.12 ns after the fix), not re-checked per finalist.
 2. Derived quantities — achieved period (`constraint − WNS`), throughput
    (`bits/cycle × f`), energy per bit (`power ÷ throughput`), gate
    equivalents (`cell area ÷ 3.7536 µm²`) — are arithmetic on the tool
@@ -677,49 +654,67 @@ it.
    2026-08-29 figures this file used to report. See `verilog/README.md`'s
    verification table and bug catalogue for exactly what was wrong and how
    it was found.
-4. **The two hybrids are unanalysed constructions.** Neither has had
+4. **The hybrid is an unanalysed construction.** It has had no
    cryptanalysis. These are engineering measurements, not a security
    argument, and the same applies by extension to any of the nine
    finalists' *specific implementation choices* here (this repo did not
    re-derive or re-verify any of the nine algorithms' own published security
    analyses — those are NIST's and each design team's, not re-litigated here).
 
-### 8.2 Ascon-family designs only (deeper first pass — §1.2)
+### 8.2 Consequences of the flow rebuild
 
-5. **SAIF nets matched are 27–39%**, because activity comes from RTL
-   simulation while the netlist is post-implementation. Vivado rates Ascon
-   "High" and both hybrids "Medium"; r=64 matches fewest because it has the
-   fewest nets. A post-implementation timing simulation would raise all three.
-6. **ASIC power activity is annotated at top-level ports only** — the VCD is
-   from RTL simulation, so only port names match the mapped netlist and
-   OpenSTA propagates inward. Gate-level annotation is *possible* on sky130
-   (SkyWater publishes behavioural Verilog models at
-   `google/skywater-pdk-libs-sky130_fd_sc_hd`) but needs a gate-level
-   simulation pass, not attempted for any of the twelve designs.
+5. **All power is vectorless**, on both targets, for all eleven designs. The
+   previous edition had simulation-derived activity (SAIF for FPGA, VCD for
+   sky130) for the two Ascon-family designs; that stimulus was not kept and
+   could not be reproduced. Vectorless numbers are default-toggle-rate
+   estimates — read them as relative ordering, not absolute silicon power.
+   sparkle's §4.2 figure in particular should not be trusted without an
+   activity-annotated re-run.
+6. **The absolute numbers are not comparable with the previous edition.**
+   This is a different flow — rebuilt scripts, Vivado 2026.1, a hand-rolled
+   OpenROAD sequence rather than ORFS (§10) — so differences between editions
+   mix real effects with flow differences and cannot be attributed to either
+   without the original scripts, which no longer exist.
+7. **What did reproduce is the evidence the rebuild is sound**: register
+   counts match the previous edition exactly on all eleven designs; FPGA
+   Slice LUTs match within ±2% on ten of eleven (romulus +8.2%); sky130 area
+   matches within ±8% on all nine finalists. The one large discrepancy,
+   Ascon's FPGA Fmax, is discussed in §3.2 and is more likely an error in the
+   previous edition than in this one.
+8. **The two Ascon-family designs' sky130 area is ~30% above the previous
+   edition** while the nine finalists are within ±8%. That asymmetry is
+   unexplained. The likeliest cause is that those two were measured by the
+   deeper pass in the previous edition and the nine by the lighter one, so
+   the finalists happen to sit closer to what a uniform flow produces — but
+   this has not been confirmed and should be treated as an open question.
+9. **The vendored sky130hd platform is incomplete.** `config.mk` references
+   `make_tracks.tcl`, `pdn.tcl`, `fastroute.tcl` and the yosys cell-map files
+   (`cells_adders_hd.v` among them); none were copied. Routing tracks were
+   reconstructed from the tech LEF (they match ORFS exactly), but the missing
+   adder mapping means adders were synthesized generically. That
+   disproportionately penalises the one adder-dominated design in the set —
+   the hybrid — so its sky130 Fmax may be pessimistic. Recovering
+   `cells_adders_hd.v` and re-running it is the obvious check.
+10. **The flow stops after global routing**, not detailed routing, because
+    the PDN config needed for detailed routing was among the missing platform
+    files. Area, timing and power are all available at that point; DRC-clean
+    detailed routing is not claimed.
 
-### 8.3 The 9 finalists only (lighter pass — §1.2)
+### 8.3 The hybrid only
 
-7. **sky130 Fmax is not a searched minimum** for any of the nine — see §1.2
-   and §4.1. Treat sky130 Fmax figures as a floor, likely to improve with a
-   real sweep, except sparkle (already near its ceiling — §4.1).
-8. **Power is vectorless** for all nine (no RTL-simulation-derived
-   activity). sparkle's number in particular (§4.2) should not be trusted
-   without a VCD-annotated re-run.
-9. **Vivado's period search was lighter** (3 iterations vs. up to 7) than
-   the Ascon-family designs' — Fmax figures are close to each design's
-   ceiling but not as exhaustively confirmed.
-10. These are nine different algorithms (including tinyjambu) with nine
-    different security margins, round counts and tag sizes — smaller/faster
-    is not "better" in isolation; it is one input into a design tradeoff
-    that also depends on each algorithm's security case, out of scope here.
-11. **These are rerun numbers, not a second, independent design pass.** The
-    FPGA and sky130 methodology (scripts, starting periods, search depth) is
-    identical to the superseded 2026-08-29 pass — only the RTL changed. A
-    real re-tuned pass (deeper period search, per-design starting points
-    picked for the fixed RTL rather than reused from the buggy RTL) would
-    likely find tighter Fmax for several of these nine, the same way the
-    Ascon-family designs' 7-iteration search does better than a 3-iteration
-    one would.
+11. **The hybrid has no valid known-answer test.** Its round counts changed
+    on 2026-09-08 and its previous 1089-vector self-generated suite was
+    produced from the older p^12/p^8 construction, so that pass no longer
+    applies (§1.1 footnote 4). Current evidence is a single directed
+    C-vs-RTL simulation. It is the least-verified design in this file.
+12. **It remains an unanalysed construction**, and the round reduction
+    lowered its security margin further. No cryptanalysis justifies either
+    the old counts or the new ones. Nothing in this file is a security claim;
+    performance numbers say nothing about whether the construction is sound.
+13. These are eleven different algorithms with different security margins,
+    round counts and tag sizes — smaller/faster is not "better" in isolation;
+    it is one input into a tradeoff that also depends on each algorithm's
+    security case, which is out of scope here.
 
 ---
 
@@ -741,51 +736,54 @@ yosys again (no unmapped cells, confirmed in this rerun's
 
 ## 10. Provenance
 
-| Metric | Tool | File / scope |
-|---|---|---|
-| Functional pass/fail, cycle counts (Ascon family, 16×16 grid) | Vivado xsim | `xsim/xsim_*.log`, `xsim/xs_f_*.log` (2026-08-25/26 scratchpad, RTL unchanged since) |
-| KAT pass/fail (tinyjambu) | Vivado xsim | testbench walking the official NIST KAT vectors |
-| KAT pass/fail (8 other finalists) | Vivado xsim | `kv2/<design>/xsim.log`, one directory per design, testbench generated by `kv2/gen.py` from the official NIST LWC KAT files, walking the real PDI/SDI/DO word-stream protocol; all eight show `RESULT words N/N ... ALL_PASS` (17127 or 19305 words, matching §1.1), run 2026-09-02 against the RTL in `verilog/` directly |
-| KAT pass/fail (Ascon-AEAD128) | Vivado xsim | `kat_ascon/tb_ascon_kat.v` (adapted from `xsim/tb_ascon.v`) driving `kat_ascon/stim_ascon_kat.mem`, generated by `kat_ascon/gen_stim.py` from the official `LWC_AEAD_KAT_128_128.txt` (1089 vectors) against the unmodified RTL in `verilog/`; shows `KAT RESULT encrypt 1089/1089 decrypt 1089/1089` / `XSIM_ALL_PASS`, run 2026-09-02, this session's scratchpad, under `kat_ascon/` |
-| KAT pass/fail (hybrids, self-generated) | Vivado xsim | No official NIST KAT suite exists for `asconsip_aead.v` / `asconsip64_aead.v` (not a NIST submission), so vectors were generated with NIST's own unmodified `kat_hybrid/r128/genkat_aead.c` / `kat_hybrid/r64/genkat_aead.c` (identical copies of `ascon-c`'s `tests/genkat_aead.c`, the same generator used for Ascon-AEAD128's own suite above) re-linked against `ascon-siphash/asconsip.c` / `asconsip64.c` via `kat_hybrid/r128/api.h`+`crypto_aead.h` / `kat_hybrid/r64/api.h`+`crypto_aead.h`, producing `kat_hybrid/r128/LWC_AEAD_KAT_r128.txt` / `kat_hybrid/r64/LWC_AEAD_KAT_r64.txt` (1089 vectors each); `kat_hybrid/tb_asconsip_kat.v` / `tb_asconsip64_kat.v` (adapted from `kat_ascon/tb_ascon_kat.v`, r=64 narrowed to its 8-byte block/64-bit `din`) drove `kat_hybrid/stim_r128_kat.mem` / `stim_r64_kat.mem` (from `kat_hybrid/gen_stim.py`, a copy of `kat_ascon/gen_stim.py`) against the unmodified RTL in `verilog/`; `kat_hybrid/xsim_r128.log` / `xsim_r64.log` both show `KAT RESULT encrypt 1089/1089 decrypt 1089/1089` / `XSIM_ALL_PASS`, run 2026-09-04, this session's scratchpad, under `kat_hybrid/` — see `verilog/README.md` for why this is not equivalent to an official NIST suite |
-| Cycle schedule / throughput basis (9 finalists, §5) | Vivado xsim | `kv2cyc/<design>/cyc.log`, one directory per design (`kv2cyc/tinyjambu/` sourced from `tj/*.mem` instead of `kv2/`), each the exact `kv2/gen.py`-generated stimulus already proven `ALL_PASS` in §1.1, replayed unmodified against the RTL in `verilog/` through `kv2cyc/tb_template_cyc.v` (`kv2/tb_template.v` plus `$time` stamps around each of the 2178 transactions, no driver-logic change); all nine re-confirm `ALL_PASS` under this instrumented testbench; steady-state cycles/block extracted by differencing the AD=0, PT=0..32-byte encrypt-transaction timestamps (`kv2cyc/analyze.py`), run 2026-09-03, this session's scratchpad |
-| FPGA utilization, route status, timing search (Ascon family) | Vivado | `synth_design`/`.../route_design` reports, 2026-08-25 scratchpad |
-| FPGA utilization, route status, timing search (9 finalists) | Vivado | `fin_v/vivado_fin2.log` + `fin_v/out/*_util.txt`, `*_timing.txt`, `*_route.txt` — rerun 2026-09-02, this session's scratchpad |
-| FPGA critical path (Ascon family) | Vivado | `report_timing` path reports |
-| FPGA power, SAIF period-matched (Ascon family) | Vivado `report_power` | period-matched SAIF activity |
-| FPGA power, vectorless (9 finalists) | Vivado `report_power` | `fin_v/out/*_power_vectorless.txt`, rerun 2026-09-02 |
-| FPGA determinism proof (Ascon family) | Vivado | single-threaded re-run, `DETERMINISM` check |
-| sky130 period sweep (Ascon family) | OpenROAD | full sweep to closing limit, 2026-08-26 scratchpad |
-| sky130 single-point run (9 finalists) | OpenROAD | `fin_sky/<design>_yosys.log` + `fin_sky/<design>_<period>.log`, one fixed generous period per design — rerun 2026-09-02, this session's scratchpad |
-| sky130 area, cells, skew, slack | OpenROAD | `report_design_area`, `report_cell_usage`, `report_clock_skew` |
-| sky130 power, VCD-annotated (Ascon family) | OpenROAD `report_power` | `read_power_activities -vcd`, scope `tb/dut` |
-| sky130 power, vectorless (9 finalists) | OpenROAD `report_power` | no activity annotation, in the same `fin_sky/*.log` as the area/timing rerun above |
-| sky130 cell area / unmapped-cell check | yosys | `stat -liberty`, in the same `fin_sky/*_yosys.log` |
-| sky130 platform | ORFS | `~/pdks/sky130hd/` |
+**The flow is in this repository**, at [`flow/`](flow/), version-controlled
+alongside the RTL. The previous edition's scripts lived only in temporary
+session scratchpads and were lost, which is why this edition exists; that
+failure mode is now closed.
 
-Vivado reports carry their own header — tool version, `Device:
-xc7a12ticsg325-1L`, `Design State: Routed`, timestamp, host — so each is
-self-identifying. Raw logs are working files under two Claude Code session
-scratchpads, not part of this repo; this table records where each number
-came from, not a browsable path. The Ascon-family and original (superseded)
-finalist logs are under session `2ea5e700-3913-4d76-b400-fd85c2f50334`; the
-KAT reruns that confirmed all nine finalists (`kv2/`) are in that same
-scratchpad, generated 2026-08-31 through 2026-09-02; the FPGA/sky130 finalist
-*rerun* that produced every finalist number in §2–§4 of this file is in a
-separate session's scratchpad, `e5181ceb-5877-438f-bd50-70d4bd26644e`, under
-`fin_v/` (Vivado) and `fin_sky/` (yosys + OpenROAD), both adapted line-for-line
-from that first session's `fin_v/flow_fin.tcl` and `fin_sky/sky.tcl` with only
-the RTL source path changed to point at the current, bug-fixed `verilog/`.
-The nine finalists' §5 cycle-schedule extraction (`kv2cyc/`) is also in that
-second session's scratchpad, generated 2026-09-03 by copying each design's
-already-proven `.mem` stimulus out of the first session's `kv2/` (`tj/` for
-tinyjambu) rather than regenerating it. The two hybrids' self-generated KAT
-run (`kat_hybrid/`) is also in the second session's scratchpad
-(`e5181ceb-5877-438f-bd50-70d4bd26644e`), generated 2026-09-04 by re-linking
-the first session's unmodified `ascon-c/tests/genkat_aead.c` (copied
-byte-for-byte into `kat_hybrid/r128/` and `kat_hybrid/r64/` so its own
-quote-included `api.h`/`crypto_aead.h` resolve to the per-hybrid shims
-there, not the original Ascon ones) against `ascon-siphash/asconsip.c` /
-`asconsip64.c` in this repo, and by adapting `kat_ascon/tb_ascon_kat.v` /
-`gen_stim.py` from the first session's KAT run — `kat_ascon/` itself is
-untouched.
+| file | what it does |
+|---|---|
+| `flow/vivado_flow.tcl` | Vivado OOC flow + adaptive period search, one design |
+| `flow/run_vivado.sh` | drives all eleven, resumable, N concurrent |
+| `flow/sky130_syn.ys.in` | yosys synthesis template for sky130hd |
+| `flow/sky130_pnr.tcl` | OpenROAD floorplan → place → CTS → global route → reports |
+| `flow/run_sky130.sh` | drives all eleven, resumable |
+| `flow/reextract_vivado.py` | rebuilds the Vivado CSV from saved reports |
+| `flow/merge_results.py` | merges both sweeps into `graphs/results.csv` |
+| `flow/build_hw_xlsx.py` | builds `hardware_analysis.xlsx` from that CSV |
+
+Reproduce with `flow/run_vivado.sh && flow/run_sky130.sh && python3
+flow/merge_results.py`. Build artifacts go to `~/.ascon-flow/` (outside the
+repo, and outside `/tmp`, so a long sweep survives across sessions); both
+runners skip designs that already have results, so an interrupted sweep
+restarts without losing completed work.
+
+| Metric | Tool | Source |
+|---|---|---|
+| FPGA LUTs, registers, occupied slices | Vivado 2026.1 | `report_utilization`, "Slice LUTs" row — not a count of LUT primitives |
+| FPGA Fmax, WNS, logic levels | Vivado 2026.1 | `report_timing_summary` at the tightest closing constraint |
+| FPGA power | Vivado `report_power` | vectorless; total on-chip = dynamic + 57 mW device static |
+| FPGA route status | Vivado | zero unrouted nets required for a period to count as closing |
+| sky130 pre-P&R area | yosys 0.38 | `stat -liberty` |
+| sky130 P&R area, GE | OpenROAD 2.0 | summed placed-instance area from OpenDB, ÷ 3.7536 µm² for GE |
+| sky130 Fmax, slack | OpenSTA (in OpenROAD) | `worst_slack` after global routing |
+| sky130 power, clock skew | OpenROAD | `report_power`, `report_clock_skew`, vectorless |
+| sky130 platform | vendored ORFS platform copy | `~/pdks/sky130hd` — **incomplete**, see §8.2 item 9 |
+| Cycle schedules | design headers + `xsim` | `verilog/*.v`, confirmed by simulation |
+
+**Tool versions:** Vivado v2026.1; OpenROAD 2.0-12381-g01bba3695; yosys
+0.38+92. Part `xc7a12ticsg325-1L`; library `sky130_fd_sc_hd__tt_025C_1v80`.
+
+**Not ORFS.** OpenROAD-flow-scripts is not installed on this machine and the
+vendored platform copy is missing several files ORFS supplies, so
+`flow/sky130_pnr.tcl` reproduces the ORFS RTL-to-routed sequence by hand.
+Routing tracks were reconstructed from the tech LEF's own LAYER pitches and
+match ORFS's values exactly; the `DONT_USE_CELLS` exclusion is read from the
+platform's own `config.mk`. What could not be reconstructed is listed in
+§8.2.
+
+**Raw logs** are under `~/.ascon-flow/vivado/` and `~/.ascon-flow/sky130/`,
+one directory per design per attempted period, each containing the synthesis
+script, the netlist, and the full tool log. They are working files, not part
+of this repository — but unlike the previous edition, the scripts that
+produce them are.

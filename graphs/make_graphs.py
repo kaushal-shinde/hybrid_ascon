@@ -127,7 +127,6 @@ def scatter(df):
         "photonbeetle": (0, -15, "center"),
         "sparkle": (0, -15, "center"),
         "elephant": (-2200, 3, "right"),
-        "hybrid r=128": (-1800, -13, "right"),
         "hybrid r=64": (-1800, 9, "right"),
     }
     for _, r in df.iterrows():
@@ -147,7 +146,7 @@ def scatter(df):
     ax.set_xlim(10000, 182000)
     ax.set_ylim(15, 280)
 
-    fig.suptitle("Area vs. speed, sky130 — all twelve cores", fontsize=15, fontweight="bold",
+    fig.suptitle("Area vs. speed, sky130 — all eleven cores", fontsize=15, fontweight="bold",
                  x=0.02, ha="left", y=0.99)
     ax.set_title("Filled = functionally verified (xsim or KAT).  Open ring = lint-clean only, unverified.",
                  fontsize=9.5, color="#555555", loc="left", pad=10)

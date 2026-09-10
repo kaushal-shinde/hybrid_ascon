@@ -1,10 +1,10 @@
 /*
- * Ascon-SipHash-r64 -- experimental hybrid AEAD, narrow-rate variant.
+ * Ascon-SipHash-r64 -- experimental hybrid AEAD.
  * See asconsip64.h for the design and for why this must not be used to protect
  * anything real.
  *
- * Same architecture as asconsip.c; the rate is 64 bits instead of 128, so data
- * is absorbed into x0 alone and x1 joins the capacity.
+ * Rate is 64 bits, absorbed into x0 alone; x1, x2 and x3 form the 192-bit
+ * capacity (matching Ascon-AEAD128's own capacity -- see asconsip64.h).
  */
 #include "asconsip64.h"
 
@@ -78,8 +78,8 @@ void asconsip64_permutation(asconsip64_state_t* s, int rounds) {
 #define PB(s) asconsip64_permutation((s), ASCONSIP64_PB_ROUNDS)
 
 /* --------------------------------------------------------------- the IV ---
- * Same encoding as the wide-rate variant, but the rate field holds 8 instead
- * of 16, so the two constructions can never share a state. */
+ * Same encoding as Ascon-AEAD128's IV, but the rate field holds 8 instead
+ * of 16. */
 
 #define ASCONSIP64_IV                                 \
   (((uint64_t)(1) << 0) |            /* AEAD    */    \
