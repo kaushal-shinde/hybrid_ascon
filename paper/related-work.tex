@@ -1,0 +1,40 @@
+% IEEE TCAD -- Related Work section
+% Included by main.tex; do not compile standalone.
+%
+% NOTE: as in introduction.tex, the citation keys below are bound to entries in
+% refs.bib whose volume/page/date fields still need checking against the
+% publisher record. No numeric claim about another author's work is quoted
+% here; comparisons to prior measurements are deliberately qualitative, because
+% this paper's own flow (Section~\ref{sec:impl}) is not the flow those papers
+% used and the absolute values are not comparable.
+
+\section{Related Work}
+\label{sec:related}
+
+Our experiment connects four main areas of prior research: permutation-based modes that separate the outer framework from the inner engine, making this kind of round substitution possible; ARX-based designs that provide our replacement round along with their well-known hardware and software trade-offs; existing benchmark studies of the NIST Lightweight Cryptography (LWC) candidates, which our eleven-design evaluation expands upon rather than repeats; and the published implementation literature on Ascon itself.
+
+\subsection{Permutation-Based Modes and the Mode/Primitive Split}
+The sponge construction \cite{sponge} and its duplex variant \cite{duplex} are built in two parts: the outer structure (the mode) and the inner mixing engine (the $b$-bit permutation). The mode governs how data is absorbed into the rate ($r$), while the capacity ($c$) is never touched by data directly---the property on which its security rests---and assumes the inner permutation is indistinguishable from a random one. Jovanovic \emph{et al.} \cite{jlm} proved that sponge-based authenticated encryption can achieve security beyond the birthday bound in the capacity, which forms the mathematical basis for Ascon's security claims \cite{caesar}.
+
+Because the mode treats the permutation as a black box, the permutation can be exchanged without breaking the mode's mechanics. 
+so Our design replaces Ascon's round function in full---both the 5-bit substitution layer and the linear diffusion layer---with SIPROUND from SIPHASH \cite{siphash}, retains Ascon's round-constant addition ahead of it, and narrows the state from five 64-bit words to four. The two layers are replaced together rather than separately because a single SIPROUND supplies, through its Addition--Rotation--XOR (ARX) operations, both the non-linearity and the inter-word mixing that Ascon divides between them.
+
+Mixing modes and permutations is standard practice. Xoodyak \cite{xoodyak} runs its Cyclist mode over the Xoodoo permutation, while ISAP \cite{isap}, itself one of the nine finalists measured here, uses Ascon's permutation inside a different, leakage-resilient mode. However, this paper does the reverse: we hold a standardized mode completely fixed, swap its round function for one from a different design family, and measure the resulting costs across hardware and software targets.
+
+\subsection{ARX Primitives and Their Cost Asymmetry}
+Add-Rotate-XOR (ARX) designs, such as Salsa20 and ChaCha \cite{salsa,chacha}, BLAKE2 \cite{blake2}, SPECK \cite{simonspeck}, and SipHash \cite{siphash}, rely entirely on modular addition for nonlinearity. Because modern CPUs natively handle these operations without using lookup tables, ARX ciphers are extremely fast, compact, and naturally immune to the cache-timing side-channel attacks demonstrated by Bernstein against AES \cite{aes-cache}.
+
+However, ARX designs struggle in hardware. Modular addition requires a carry propagation, which creates physical delays in the circuit. The SIMON and SPECK families \cite{simonspeck} clearly illustrate this divide: SIMON was built without addition for hardware efficiency, while SPECK relies on addition for software speed. SPARKLE, the only ARX-based NIST LWC finalist \cite{sparkle}, is built on a custom ARX-box called Alzette \cite{alzette}, designed to obtain strong cryptographic properties at bounded circuit depth. SPARKLE is the natural reference point for ARX in this field, though not a like-for-like one: its permutation is wider and performs considerably more work per invocation than SIPROUND over a 256-bit state, so Section~\ref{sec:results} reports it as context rather than as a matched ARX baseline.
+
+For our experiment, we substitute Ascon's s-box and linear diffusion layer with SIPROUND from SipHash \cite{siphash}. SipHash was originally designed as a short-input pseudorandom function for hash tables rather than for bulk encryption; the grounds for carrying its round into an AEAD permutation are set out above.
+
+\subsection{Benchmarking of the NIST LWC Candidates}
+The NIST Lightweight Cryptography (LWC) process produced extensive benchmarking data. Hardware comparisons were standardized using the GMU Hardware API \cite{lwc-api}---the interface the nine finalist cores measured here implement---allowing for consistent FPGA \cite{mohajerani} and ASIC \cite{aagaard} evaluations as summarized by NIST \cite{nist-lwc-report, nist-lwc-final}. In software, candidates were benchmarked across various microcontrollers \cite{renner,weatherley}. 
+
+Our evaluation differs from these campaigns in two ways. First, our goal is not to rank candidates; instead, we use the eleven-design field as a calibration scale to measure the precise impact of our ARX substitution. Second, our software tests use unmodified C code on a standard x86-64 processor rather than tuned embedded code.Because a standard PC compiler optimizes code very differently than an embedded compiler, you cannot compare the exact performance numbers—especially the code size—to previous embedded studies \cite{renner,weatherley};. You can only compare the *relative rankings*, meaning which algorithm placed first, second, or third.
+
+\subsection{Ascon Implementations}
+Ascon's 5-bit S-box has algebraic degree 2, which makes it unusually cheap to mask against side-channel attacks. Dedicated Ascon hardware and its side-channel behaviour were studied early by Gro\ss{} \emph{et al.} \cite{gross}, and a considerable number of cores have followed, particularly since standardization as NIST SP 800-232 \cite{nist-sp800-232}. The Ascon-AEAD128 core measured in our paper is not intended to compete with these highly optimized, protected versions. Instead, it is a basic, round-per-cycle implementation built specifically to serve as a direct, apples-to-apples control group for our hybrid design using the exact same toolchain.
+
+
+In summary, this paper presents a controlled substitution rather than a new cipher design. We keep Ascon's mode fixed, replace its standard round function with SIPROUND, and measure the results in C and Verilog against ten existing algorithms using consistent hardware and software flows. The security rationale for the resulting hybrid rests on the maturity of the two components it combines; dedicated cryptanalysis of the combination itself remains future work.

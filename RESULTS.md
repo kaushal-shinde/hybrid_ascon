@@ -34,7 +34,7 @@ describe a different construction from the one the previous edition measured
 | design | file | key / npub / tag (bytes) | KAT-verified? |
 |---|---|---|---|
 | **Ascon-AEAD128** (the winner) | `ascon_aead128.v` | 16 / 16 / 16 | **yes** (1089/1089 vectors)³ |
-| **hybrid r=64** (unanalysed) | `asconsip64_aead.v` | 16 / 16 / 16 | no — C/RTL cross-check only⁴ |
+| **hybrid r=64** (no dedicated cryptanalysis) | `asconsip64_aead.v` | 16 / 16 / 16 | no — C/RTL cross-check only⁴ |
 | TinyJAMBU-128 | `tinyjambu_lwc.v` | 16 / 12 / 8 | **yes** (17127/17127 words) |
 | Xoodyak | `xoodyak_lwc.v` | 16 / 16 / 16 | **yes** (19305/19305 words), after fixing 6 bugs² |
 | GIFT-COFB | `giftcofb_lwc.v` | 16 / 16 / 16 | **yes** (19305/19305 words), after fixing 9 bugs² |
@@ -654,9 +654,8 @@ it.
    2026-08-29 figures this file used to report. See `verilog/README.md`'s
    verification table and bug catalogue for exactly what was wrong and how
    it was found.
-4. **The hybrid is an unanalysed construction.** It has had no
-   cryptanalysis. These are engineering measurements, not a security
-   argument, and the same applies by extension to any of the nine
+4. **The hybrid has had no dedicated cryptanalysis of its own.** These are
+   engineering measurements, not a security argument, and the same applies by extension to any of the nine
    finalists' *specific implementation choices* here (this repo did not
    re-derive or re-verify any of the nine algorithms' own published security
    analyses — those are NIST's and each design team's, not re-litigated here).
@@ -707,10 +706,11 @@ it.
     produced from the older p^12/p^8 construction, so that pass no longer
     applies (§1.1 footnote 4). Current evidence is a single directed
     C-vs-RTL simulation. It is the least-verified design in this file.
-12. **It remains an unanalysed construction**, and the round reduction
-    lowered its security margin further. No cryptanalysis justifies either
-    the old counts or the new ones. Nothing in this file is a security claim;
-    performance numbers say nothing about whether the construction is sound.
+12. **The round reduction lowered its security margin.** No dedicated
+    analysis backs either the old counts or the new ones; establishing the
+    margin for p^10/p^6 is future work. Nothing in this file is a security
+    claim — performance numbers say nothing about whether the construction
+    is sound.
 13. These are eleven different algorithms with different security margins,
     round counts and tag sizes — smaller/faster is not "better" in isolation;
     it is one input into a tradeoff that also depends on each algorithm's

@@ -1,0 +1,78 @@
+% IEEE TCAD -- Introduction section
+% Included by main.tex; do not compile standalone.
+%
+% NOTE: the citation keys below are bound to entries in refs.bib; the fields of
+% those entries still need checking against the publisher record. Every numeric
+% result quoted here is from this work's own measurements (see graphs/results.csv,
+% software/results.csv); no figure is taken from another paper without attribution.
+
+\section{Introduction}
+
+\IEEEPARstart{W}{e} are surrounded by a tremendous number of lightweight
+Internet of Things (IoT) devices in our day-to-day lives, includ-
+ing smartwatches, home automation systems, and industrial
+sensors . These devices operate across four architectural
+layers: the application layer (mobile apps, voice recognition),
+the data processing layer (CPU/GPU compute), the network
+layer (Wi-Fi, Bluetooth), and the sensing layer (thermostats,
+transducers) . Every day, these devices communicate over
+local networks and the broader Internet, capturing and trans-
+mitting sensitive personal and environmental data – creating a
+broad attack surface that spans physical attacks, side-channel
+exploitation, cryptanalysis, and network eavesdropping .
+
+\subsection{AES and Its Limits}
+
+ for lightweight Internet of Things (IoT) devices like medical implants, smart meters, and environmental sensors, AES is computationally infeasible due to severe hardware and power constraints. AES relies on a large 128-bit block size and complex matrix transformations that demand significant RAM, ROM, and processing cycles. This forces basic microcontrollers to stay awake longer, rapidly draining their small batteries, and requires too many hardware logic gates on tiny microchips. To connect these devices securely, engineers previously used alternative ciphers like PRESENT, Trivium, or SIMON and SPECK, which relied on ultra-simple logical operations to minimize chip space and power consumption. However, this efficiency came with dangerous trade-offs: these older ciphers often used small 64-bit blocks that leak information when transmitting large amounts of IoT data, offered weaker security margins, and lacked native authentication, meaning they could not stop hackers from tampering with commands or sending fake data. Ascon solves this IoT security crisis by using a highly efficient "sponge" design. It delivers ironclad, modern 128-bit security alongside native Authenticated Encryption with Associated Data (AEAD) in a single step. This allows battery-powered IoT devices to encrypt and verify their data simultaneously, consuming minimal power and chip space without sacrificing security.
+
+
+
+
+\subsection{Origin of  Ascon}
+
+Securing resource-constrained Internet of Things hardware presents a difficult balance between cryptographic security and physical resource limits. Early deployment strategies relied on dedicated lightweight block ciphers like PRESENT, SIMON, and SPECK, or stream ciphers such as Trivium and Grain-128AEAD. While these early primitives achieved low gate counts in hardware, their architectural reliance on small 64-bit blocks created significant security trade-offs. Processing long data streams under a single key exposed these systems to birthday-bound state-leakage attacks. Furthermore, because these early ciphers lacked integrated Authenticated Encryption with Associated Data features, designers had to pair encryption engines with external Message Authentication Code blocks. Combining separate algorithms added substantial memory and hardware overhead, negating much of the original resource savings. Engineered in 2014 by researchers from Graz University of Technology, Infineon Technologies, and Lamarr Security Research, Ascon was designed to overcome these structural limits as a unified cryptographic suite built on a flexible 320-bit sponge permutation core. This shared mathematical state natively supports both AEAD and secure cryptographic hashing within the exact same structural pipeline, significantly reducing code size and silicon area while maintaining strong mathematical security margins across constrained microcontrollers and dedicated integrated circuits.
+
+Ascon’s transition from a research proposal to a global standard was driven by success in two key international selection competitions. The CAESAR competition evaluated 57 initial algorithms over multiple elimination rounds, ultimately selecting Ascon in 2019 as the Primary Choice for Use Case 1, which designated lightweight applications. While bit-oriented stream ciphers like ACORN offered lower gate counts in specialized hardware, ACORN suffered from high software overhead and significant side-channel vulnerabilities, leading the committee to favor Ascon's versatile hardware-software balance. Ascon subsequently entered NIST’s Lightweight Cryptography selection process among 56 competing candidates. Following multi-year evaluations focused on hardware gate efficiency, software speed, memory bounds, and physical attack resilience, NIST narrowed the pool to ten finalists in 2021 before officially declaring Ascon the winning primary standard for global lightweight cryptography in February 2023.
+
+Ascon outperformed the remaining nine NIST LWC finalists because it avoided the specific architectural weaknesses that limited competing designs. Hardware-centric primitives such as TinyJambu and Grain-128AEAD achieved small gate footprints on application-specific integrated circuits through bitwise silicon operations, but this design caused severe processing bottlenecks on standard microcontrollers. In contrast, Ascon uses 64-bit word operations that map directly to standard register architectures without sacrificing hardware efficiency. Similarly, side-channel vulnerable ciphers like Romulus, GIFT-COFB, and PHOTON-Beetle required heavy masking countermeasures to protect against physical power-analysis attacks, which drastically inflated their memory usage and execution latency. Ascon mitigates this issue by employing a low-degree, degree-2, 5-bit substitution box that enables efficient, low-overhead hardware masking. Finally, large-state ciphers like Xoodyak and Sparkle achieved high software speeds but demanded excessive RAM and ROM allocation, rendering them impractical for the most memory-restricted microchips. By balancing software throughput, hardware area, masking simplicity, and state size inside a single unified sponge construction, Ascon provided chip designers with maximum functional utility per unit of silicon area.
+
+
+\subsection{Where Ascon Is Costly}
+
+Ascon is highly optimized for hardware. Because its core operations use simple bitwise logic rather than complex memory lookups, it can process data in parallel with almost zero delay. In our tests on a Xilinx Artix-7 FPGA, Ascon was the fastest of all eleven designs, reaching 241.4 MHz.
+
+However, this hardware efficiency creates challenges for software. A standard CPU has to manually emulate these parallel hardware operations, which requires extra instructions. To keep the software running fast, the official C code expands these instructions significantly. As a result, Ascon requires 15,569 bytes of ROM—the largest memory footprint of all tested designs, and 3.6 times larger than its smallest competitor. For constrained devices where flash memory is strictly limited, this creates a significant trade-off: Ascon delivers top-tier hardware speed, but demands massive software storage.
+
+\subsection{ARX Primitives}
+
+In contrast to hardware-focused designs, Add-Rotate-XOR (ARX) algorithms are optimized for software efficiency. Because they rely entirely on modular addition, bitwise rotation, and XOR, they work more optimally  to standard CPU instructions without requiring memory lookup tables. Furthermore, their execution time does not depend on the data being processed. This makes them naturally immune to cache-timing attacks.And this is the exact issue that bitslicing attempts to solve. Well-known existing algorithms like ChaCha20, BLAKE2, and SipHash use this ARX structure, which is why ChaCha20 is widely deployed on systems lacking dedicated AES hardware.
+
+SipHash is one of the most efficient example of this design. Its core function, SIPROUND, processes a 256-bit state using only four additions, six rotations, and four XOR operations. It was specifically engineered to process short data inputs rapidly on processors with limited resources.
+
+\subsection{Motivation Behind Substituting the Round Function}
+
+Ascon clearly separates its outer operating mode from its inner mixing engine, meaning the outer structure works perfectly fine regardless of how the inside is built. This allows us to experiment with keeping Ascon's proven mode while replacing its current inner engine with an ARX design. We are making this swap because the two approaches have opposite strengths: Ascon's current setup is highly efficient for physical hardware but clunky and slow in software, whereas ARX uses basic math that runs incredibly fast in software but is difficult to build into chips. By combining Ascon's mode with an ARX engine, we aim to trade hardware efficiency for better software speed. Because this specific hybrid has never been tested across both software and hardware, we need to find out if it combines the best features of both or just inherits their worst flaws.
+
+
+\subsection{Contributions}
+
+This paper introduces a kind of hybrid design of ascon aead and siphash and measures its performance. We call it Ascon-SipHash-r64. It keeps Ascon's overall outer structure—such as its operating mode, keys, and padding—but replaces Ascon's round function in full, both the substitution layer and the linear diffusion layer, with SipHash's SIPROUND, retaining Ascon's round-constant addition ahead of it. The total data size is shrunk to 256 bits, split into four 64-bit chunks. By keeping the processing block at 64 bits, we maintain the same 192-bit security reserve as standard Ascon-AEAD128. This new setup uses 10 rounds ($p^{10}$) to start and finish, and 6 rounds ($p^{6}$) for each block of data.
+
+Our main contributions are:
+
+\begin{itemize}
+\item \emph{A complete design:}We have developed a new version of ascon aead and implemented in both c and verilog.
+
+\item \emph{A fair, head-to-head performance test:} We compared 11 different cryptography engines, including standard Ascon, our new mixed design, and nine other NIST finalists. We tested all of them using the exact same methods on an FPGA and a standard chip-making process (130nm). We also measured their software speeds. All of our testing tools are being released publicly with this paper.
+\item \emph{A clear measurement of the pros and cons:} The mixed version takes up less physical space on chips than standard Ascon (874 vs. 1122 Slice LUTs, and 48,304 vs. 62,955 µm²). It is also the fastest of all 11 designs in software, hitting 367.5 MB/s compared to Ascon's 277.0 MB/s, while taking up about 3.6 times less memory. However, its hardware clock speed drops heavily to just 23\% of standard Ascon's speed. We proved that this huge slowdown is caused by a long chain of basic math steps that create a bottleneck in the chip's processing path.
+\end{itemize}
+
+The remainder of this paper is organised as follows. Section~\ref{sec:related}
+places the substitution against prior work on sponge modes, ARX primitives and
+the benchmarking of the NIST LWC candidates. Section~\ref{sec:prelim}
+reviews the Ascon mode and SIPROUND. Section~\ref{sec:construction} specifies
+the hybrid. Section~\ref{sec:impl} describes the hardware and software
+implementations and the evaluation flow. Section~\ref{sec:results} presents the
+measured comparison across all eleven designs. Section~\ref{sec:discussion}
+analyses the critical path.
+Section~\ref{sec:conclusion} concludes.

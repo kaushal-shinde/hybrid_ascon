@@ -6,7 +6,8 @@ comparison — C and Verilog implementations of all nine algorithms that lost
 to Ascon in the final round of NIST's Lightweight Cryptography competition.
 Everything here is either vendored official source or a from-scratch Verilog
 transliteration of one; nothing is a new cipher design except the hybrid,
-which is unanalysed and not a security recommendation. All eleven
+which has had no dedicated cryptanalysis of its own — see
+`ascon-siphash/README.md`. All eleven
 hardware cores — Ascon, the hybrid, and the nine finalists — live together
 in one directory and are measured together in one report, because that is
 what they are: Ascon and the field it beat, not two separate projects.

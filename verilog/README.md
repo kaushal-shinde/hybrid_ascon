@@ -9,7 +9,7 @@ competition (`../lwc-finalists/`). All eleven are measured together in
 | file | algorithm | key / npub / tag (bytes) |
 |---|---|---|
 | `ascon_aead128.v` | Ascon-AEAD128 (NIST SP 800-232, the winner) | 16 / 16 / 16 |
-| `asconsip64_aead.v` | Ascon-SipHash hybrid, r=64 (unanalysed) | 16 / 16 / 16 |
+| `asconsip64_aead.v` | Ascon-SipHash hybrid, r=64 | 16 / 16 / 16 |
 | `tinyjambu_lwc.v` | TinyJAMBU-128 | 16 / 12 / 8 |
 | `xoodyak_lwc.v` | Xoodyak | 16 / 16 / 16 |
 | `giftcofb_lwc.v` | GIFT-COFB | 16 / 16 / 16 |
@@ -24,7 +24,7 @@ competition (`../lwc-finalists/`). All eleven are measured together in
 twins of the C in `../ascon-aead128/` and `../ascon-siphash/`. The other nine
 are transliterations of the reference C vendored in `../lwc-finalists/`,
 whose own `PROVENANCE.md` records where and when each was fetched from NIST.
-The hybrid is an unanalysed construction — see `../ascon-siphash/README.md`.
+The hybrid has had no dedicated cryptanalysis — see `../ascon-siphash/README.md`.
 
 ## Two interfaces, one comparison
 
@@ -99,8 +99,7 @@ found or fixed — this run confirms correctness, it doesn't change the RTL.
 **Why no *official* KAT vector suite exists for the hybrid.**
 `asconsip64_aead.v` implements an experimental
 Ascon-SipHash construction that is not a NIST submission (see
-`../ascon-siphash/README.md`: "unanalysed construction — no cryptanalysis
-has been done on it"), so there is no NIST-published set of
+`../ascon-siphash/README.md`), so there is no NIST-published set of
 Count/Key/Nonce/PT/AD/CT vectors for an algorithm NIST never received. The
 repository does vendor the standalone SipHash reference (`../siphash/`),
 whose own README describes a standard 64-vector KAT for SipHash-2-4 — but

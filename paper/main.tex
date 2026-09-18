@@ -1,0 +1,111 @@
+%%% Ascon-SipHash-r64 -- IEEE journal manuscript
+%%%
+%%% Style: IEEE two-column journal format (IEEEtran v1.8b, 10 pt), per the
+%%% author guidelines at http://www.ieeeauthorcenter.ieee.org.
+%%% Hard limit: 14 pages including author photographs and biographies, which
+%%% are added at revision time -- see the reserved block before \end{document}.
+%%%
+%%% Build:  pdflatex main && pdflatex main
+%%% IEEEtran.cls is vendored alongside this file, so no TeX Live installation
+%%% of the IEEE package is required.
+
+\documentclass[journal,10pt]{IEEEtran}
+
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{url}
+
+\begin{document}
+
+\title{Substituting an ARX Round Function into the\\ Ascon Mode: A Hardware and Software\\ Cost Characterisation}
+
+\author{Kaushal~Shinde% <-- replace with the full author list before submission
+\thanks{Manuscript received \today.}%
+\thanks{The author is with the Department, Institution, City, Country
+(e-mail: azmuth6900@gmail.com).}}
+
+\markboth{IEEE Transactions on Computer-Aided Design of Integrated Circuits and Systems}%
+{Shinde: Substituting an ARX Round Function into the Ascon Mode}
+
+\maketitle
+
+% \begin{abstract}
+% Ascon, standardised by NIST as SP 800-232, is the fastest of the eleven
+% authenticated-encryption cores evaluated in this work on an FPGA target, yet
+% its official reference C is the largest binary among them. The asymmetry
+% follows from its bitsliced substitution round, which is shallow combinational
+% logic in silicon but must be emulated with word-wide Boolean operations on a
+% CPU. Ascon's specification separates its duplex-sponge mode from the
+% permutation the mode invokes, which raises the question of what the mode costs
+% when that round function is exchanged for an Add--Rotate--XOR one. We define
+% Ascon-SipHash-r64, which retains Ascon's mode, round constants, key-injection
+% positions, padding rule and IV encoding over a 256-bit state of four 64-bit
+% words, and substitutes SipHash's SIPROUND for the S-box-and-linear-layer round.
+% We give a C reference and a round-per-cycle Verilog core, and evaluate eleven
+% designs---Ascon-AEAD128, the proposed hybrid, and the nine remaining NIST
+% Lightweight Cryptography finalists---under one reproducible flow on a Xilinx
+% Artix-7 FPGA and on the SkyWater sky130 130\,nm process, together with native
+% profiling of every design's reference C. The hybrid is smaller on both hardware
+% targets, 874 against 1122 slice LUTs and 48\,304 against
+% 62\,955\,$\mu$m$^{2}$, and is the fastest of the eleven in software at
+% 367.5~MB/s against 277.0~MB/s with a $3.6\times$ smaller binary. Against this,
+% its ASIC clock is $0.23\times$ Ascon's, and 38 chained carry stages account for
+% approximately 94\% of its standard-cell critical path. Dedicated cryptanalysis
+% of the combined construction remains future work.
+% \end{abstract}
+
+% \begin{IEEEkeywords}
+% Add--Rotate--XOR (ARX), application-specific integrated circuits, Ascon,
+% authenticated encryption, field-programmable gate arrays, lightweight
+% cryptography, SipHash, sponge construction.
+% \end{IEEEkeywords}
+
+\IEEEpeerreviewmaketitle
+
+\input{introduction}
+
+\input{related-work}
+
+%%% ------------------------------------------------------------------
+%%% Remaining sections. The labels are declared here so that the forward
+%%% references at the end of the Introduction resolve; replace each stub
+%%% with its section file as it is written.
+%%% ------------------------------------------------------------------
+
+\section{Preliminaries}
+\label{sec:prelim}
+
+\section{The Ascon-SipHash-r64 Construction}
+\label{sec:construction}
+
+\section{Implementation and Evaluation Flow}
+\label{sec:impl}
+
+\section{Results}
+\label{sec:results}
+
+\section{Discussion}
+\label{sec:discussion}
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+%%% ------------------------------------------------------------------
+%%% Bibliography. IEEEtran.bst is vendored alongside this file.
+%%% Build: pdflatex main && bibtex main && pdflatex main && pdflatex main
+%%% ------------------------------------------------------------------
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+%%% ------------------------------------------------------------------
+%%% Author photographs and biographies are not required at initial
+%%% submission but will be requested at revision. Uncomment and fill in;
+%%% the space they occupy must fit inside the 14-page hard limit.
+%%% ------------------------------------------------------------------
+%
+% \begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{photo.jpg}}]{Kaushal Shinde}
+% Biography text here.
+% \end{IEEEbiography}
+
+\end{document}

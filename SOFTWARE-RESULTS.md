@@ -190,8 +190,8 @@ partially: `RESULTS.md` found the hybrid ASIC-*worse* than Ascon (SIPROUND's
 four chained 64-bit adders don't optimize away in silicon), but in software
 those same adds are exactly what a 64-bit CPU's ALU is fast at — another
 instance of the same "cost model determines the winner" pattern as §4.1.
-**The hybrid remains an unanalysed construction** (`RESULTS.md` §8.1) — a
-software speed win is not a security argument.
+**The hybrid has had no dedicated cryptanalysis of its own** (`RESULTS.md`
+§8.1) — a software speed win is not a security argument either way.
 
 ### 4.5 Decrypt costs about the same as encrypt, for all eleven
 
