@@ -1,6 +1,6 @@
 design,verified,fpga_lut,fpga_reg,fpga_fmax_mhz,fpga_power_mw,fpga_power_measured,sky130_area_um2,sky130_ge,sky130_fmax_mhz,sky130_power_mw,sky130_power_measured
 Ascon-AEAD128,yes,1122,728,241.43,132.0,no,62955,16772,260.6,88.000,no
-hybrid r=64,yes,874,600,139.45,83.0,no,48304,12869,58.8,20.300,no
+SipCon64,yes,874,600,139.45,83.0,no,48304,12869,58.8,20.300,no
 tinyjambu,yes,473,533,231.37,80.0,no,27081,7215,300.6,10.100,no
 xoodyak,yes,1554,885,129.90,97.0,no,74590,19872,196.0,19.500,no
 giftcofb,yes,1530,1005,119.99,68.0,no,61004,16252,234.1,38.800,no

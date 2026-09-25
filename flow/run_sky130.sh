@@ -43,7 +43,7 @@ cp "$HERE/sky130_pnr.tcl" "$HERE/sky130_syn.ys.in" "$WORK/"
 PNR="$WORK/sky130_pnr.tcl"
 SYNIN="$WORK/sky130_syn.ys.in"
 
-DESIGNS="ascon_aead128 asconsip64_aead tinyjambu_lwc xoodyak_lwc giftcofb_lwc
+DESIGNS="ascon_aead128 sipcon64_aead tinyjambu_lwc xoodyak_lwc giftcofb_lwc
          grain128aead_lwc sparkle_lwc elephant_lwc isap_lwc photonbeetle_lwc
          romulus_n_lwc"
 

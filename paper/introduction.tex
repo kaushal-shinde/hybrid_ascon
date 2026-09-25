@@ -56,7 +56,7 @@ Ascon clearly separates its outer operating mode from its inner mixing engine, m
 
 \subsection{Contributions}
 
-This paper introduces a kind of hybrid design of ascon aead and siphash and measures its performance. We call it Ascon-SipHash-r64. It keeps Ascon's overall outer structure—such as its operating mode, keys, and padding—but replaces Ascon's round function in full, both the substitution layer and the linear diffusion layer, with SipHash's SIPROUND, retaining Ascon's round-constant addition ahead of it. The total data size is shrunk to 256 bits, split into four 64-bit chunks. By keeping the processing block at 64 bits, we maintain the same 192-bit security reserve as standard Ascon-AEAD128. This new setup uses 10 rounds ($p^{10}$) to start and finish, and 6 rounds ($p^{6}$) for each block of data.
+This paper introduces a kind of hybrid design of ascon aead and siphash and measures its performance. We call it SipCon64. It keeps Ascon's overall outer structure—such as its operating mode, keys, and padding—but replaces Ascon's round function in full, both the substitution layer and the linear diffusion layer, with SipHash's SIPROUND, retaining Ascon's round-constant addition ahead of it. The total data size is shrunk to 256 bits, split into four 64-bit chunks. By keeping the processing block at 64 bits, we maintain the same 192-bit security reserve as standard Ascon-AEAD128. This new setup uses 10 rounds ($p^{10}$) to start and finish, and 6 rounds ($p^{6}$) for each block of data.
 
 Our main contributions are:
 
@@ -69,9 +69,10 @@ Our main contributions are:
 
 The remainder of this paper is organised as follows. Section~\ref{sec:related}
 places the substitution against prior work on sponge modes, ARX primitives and
-the benchmarking of the NIST LWC candidates. Section~\ref{sec:prelim}
-reviews the Ascon mode and SIPROUND. Section~\ref{sec:construction} specifies
-the hybrid. Section~\ref{sec:impl} describes the hardware and software
+the benchmarking of the NIST LWC candidates. Section~\ref{sec:background}
+reviews the Ascon mode and SIPROUND and states the question their opposing
+cost profiles raise. Section~\ref{sec:architecture} specifies the
+construction and its hardware realization. Section~\ref{sec:impl} describes the hardware and software
 implementations and the evaluation flow. Section~\ref{sec:results} presents the
 measured comparison across all eleven designs. Section~\ref{sec:discussion}
 analyses the critical path.

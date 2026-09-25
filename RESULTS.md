@@ -1,7 +1,7 @@
-# Hardware results: Ascon-AEAD128, an Ascon-SipHash hybrid, and the 9 NIST LWC finalists
+# Hardware results: Ascon-AEAD128, an SipCon64 hybrid, and the 9 NIST LWC finalists
 
 Area, timing and power for all eleven AEAD cores in [`verilog/`](verilog/) —
-the NIST-standardized Ascon-AEAD128, an experimental Ascon-SipHash hybrid,
+the NIST-standardized Ascon-AEAD128, an experimental SipCon64 hybrid,
 and one core per algorithm that lost to Ascon in the final round of NIST's
 Lightweight Cryptography competition — measured on the same FPGA with Vivado
 and the same 130 nm ASIC process with OpenROAD.
@@ -34,7 +34,7 @@ describe a different construction from the one the previous edition measured
 | design | file | key / npub / tag (bytes) | KAT-verified? |
 |---|---|---|---|
 | **Ascon-AEAD128** (the winner) | `ascon_aead128.v` | 16 / 16 / 16 | **yes** (1089/1089 vectors)³ |
-| **hybrid r=64** (no dedicated cryptanalysis) | `asconsip64_aead.v` | 16 / 16 / 16 | no — C/RTL cross-check only⁴ |
+| **SipCon64** (no dedicated cryptanalysis) | `sipcon64_aead.v` | 16 / 16 / 16 | no — C/RTL cross-check only⁴ |
 | TinyJAMBU-128 | `tinyjambu_lwc.v` | 16 / 12 / 8 | **yes** (17127/17127 words) |
 | Xoodyak | `xoodyak_lwc.v` | 16 / 16 / 16 | **yes** (19305/19305 words), after fixing 6 bugs² |
 | GIFT-COFB | `giftcofb_lwc.v` | 16 / 16 / 16 | **yes** (19305/19305 words), after fixing 9 bugs² |
@@ -50,7 +50,7 @@ exists for it. It previously had a self-generated one and a 16×16 synthetic
 length grid against its C reference; both were produced from the p^12/p^8
 version of the construction and neither applies to the p^10/p^6 design
 measured here. See footnote 4 for what does back it now, and
-`ascon-siphash/README.md` for the construction itself.
+`sipcon64/README.md` for the construction itself.
 
 ² Full official NIST LWC KAT vector grid in Vivado `xsim`, both directions.
 All 42 bugs across these eight cores (tinyjambu needed none) are catalogued
@@ -71,7 +71,7 @@ passes.
 
 ⁴ **The hybrid has no valid KAT run as of this edition.** It previously had
 one: NIST's own unmodified `genkat_aead.c` was re-linked against the hybrid's
-reference C to produce 1089 self-generated vectors, and `asconsip64_aead.v`
+reference C to produce 1089 self-generated vectors, and `sipcon64_aead.v`
 passed all of them in both directions on 2026-09-04. Those vectors were
 generated from the **p^12/p^8** version of the construction. The round counts
 were reduced to **p^10/p^6** on 2026-09-08, which changes the function — and
@@ -81,7 +81,7 @@ longer means anything about the current design.
 
 What the current design has instead is a directed cross-check: a testbench
 generated from the C reference's own output was walked through
-`asconsip64_aead.v` in Vivado `xsim` (24-byte AD, 40-byte message), and every
+`sipcon64_aead.v` in Vivado `xsim` (24-byte AD, 40-byte message), and every
 ciphertext block and the 128-bit tag matched the C exactly; the C itself
 round-trips and rejects a tampered ciphertext. That establishes the RTL and the
 C agree, which is what the twin relationship claims — but it is one vector, not
@@ -158,7 +158,7 @@ default-activity estimate for every design — see §1.2.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | tinyjambu | **473** | **533** | 231.4 MHz | 80 mW | **27 081 µm²** | **7 215** | **300.6 MHz** | **10.1 mW** |
 | grain128aead | 598 | 915 | 214.3 MHz | 85 mW | 41 247 µm² | 10 989 | 277.3 MHz | 16.4 mW |
-| **hybrid r=64** | 874 | 600 | 139.4 MHz | 83 mW | 48 304 µm² | 12 869 | 58.8 MHz | 20.3 mW |
+| **SipCon64** | 874 | 600 | 139.4 MHz | 83 mW | 48 304 µm² | 12 869 | 58.8 MHz | 20.3 mW |
 | giftcofb | 1530 | 1005 | 120.0 MHz | 68 mW | 61 004 µm² | 16 252 | 234.1 MHz | 38.8 mW |
 | **Ascon-AEAD128** | 1122 | 728 | **241.4 MHz** | 132 mW | 62 955 µm² | 16 772 | 260.6 MHz | 88.0 mW |
 | xoodyak | 1554 | 885 | 129.9 MHz | 97 mW | 74 590 µm² | 19 872 | 196.0 MHz | 19.5 mW |
@@ -217,7 +217,7 @@ dual-output LUT6, and Slice LUTs is the conventional FPGA area metric.
 | design | Slice LUTs | Slice Registers | Occupied slices | logic levels |
 |---|---:|---:|---:|---:|
 | Ascon-AEAD128 | 1122 (14.0%) | 728 | 348 | **3** |
-| hybrid r=64 | 874 (10.9%) | 600 | 279 | 27 |
+| SipCon64 | 874 (10.9%) | 600 | 279 | 27 |
 | tinyjambu | **473 (5.9%)** | **533** | 192 | 4 |
 | xoodyak | 1554 (19.4%) | 885 | 491 | 8 |
 | giftcofb | 1530 (19.1%) | 1005 | 475 | 11 |
@@ -248,7 +248,7 @@ achieved period across an identical 7-iteration binary search per design
 | design | tightest closing constraint | WNS | achieved period | **Fmax** |
 |---|---:|---:|---:|---:|
 | Ascon-AEAD128 | 4.142 ns | +0.142 | 4.000 ns | **241.43 MHz** |
-| hybrid r=64 | 7.171 ns | +0.017 | 7.154 ns | 139.45 MHz |
+| SipCon64 | 7.171 ns | +0.017 | 7.154 ns | 139.45 MHz |
 | tinyjambu | 4.322 ns | +0.283 | 4.039 ns | 231.37 MHz |
 | xoodyak | 7.698 ns | +0.136 | 7.562 ns | 129.90 MHz |
 | giftcofb | 8.334 ns | +0.191 | 8.143 ns | 119.99 MHz |
@@ -284,7 +284,7 @@ ordering, not absolute silicon power.
 | design | dynamic | device static | **total on-chip** | activity source |
 |---|---:|---:|---:|---:|
 | Ascon-AEAD128 | 75 mW | 57 mW | 132 mW | vectorless |
-| hybrid r=64 | 26 mW | 57 mW | 83 mW | vectorless |
+| SipCon64 | 26 mW | 57 mW | 83 mW | vectorless |
 | tinyjambu | 23 mW | 57 mW | 80 mW | vectorless |
 | xoodyak | 39 mW | 57 mW | 97 mW | vectorless |
 | giftcofb | 11 mW | 57 mW | 68 mW | vectorless |
@@ -317,7 +317,7 @@ design's area.
 | design | yosys pre-P&R area | **P&R area** | **GE** | period | **Fmax** | clock skew |
 |---|---:|---:|---:|---:|---:|---:|
 | Ascon-AEAD128 | 46 610 µm² | 62 955 µm² | 16 772 | 3.838 ns | 260.6 MHz | 0.05 ns |
-| hybrid r=64 | 37 002 µm² | 48 303 µm² | 12 869 | 17.012 ns | 58.8 MHz | -0.04 ns |
+| SipCon64 | 37 002 µm² | 48 303 µm² | 12 869 | 17.012 ns | 58.8 MHz | -0.04 ns |
 | tinyjambu | 23 881 µm² | **27 080 µm²** | **7 215** | 3.327 ns | 300.6 MHz | 0.03 ns |
 | xoodyak | 58 345 µm² | 74 590 µm² | 19 872 | 5.102 ns | 196.0 MHz | 0.04 ns |
 | giftcofb | 52 646 µm² | 61 003 µm² | 16 252 | 4.271 ns | 234.1 MHz | 0.04 ns |
@@ -352,7 +352,7 @@ reproduced.
 | design | combinational | clock | **total** | % combinational | source |
 |---|---:|---:|---:|---:|---|
 | Ascon-AEAD128 | 62.00 mW | 4.74 mW | 88.0 mW | 70.5% | vectorless |
-| hybrid r=64 | 15.80 mW | 0.87 mW | 20.3 mW | 77.8% | vectorless |
+| SipCon64 | 15.80 mW | 0.87 mW | 20.3 mW | 77.8% | vectorless |
 | tinyjambu | 0.37 mW | 3.61 mW | **10.1 mW** | 3.6% | vectorless |
 | xoodyak | 5.75 mW | 4.89 mW | 19.5 mW | 29.5% | vectorless |
 | giftcofb | 18.80 mW | 5.61 mW | 38.8 mW | 48.5% | vectorless |
@@ -473,7 +473,7 @@ schedule: the hybrid's counts were reduced from p^12/p^8 to p^10/p^6 on
 2026-09-08 (§1.1).
 
 ```
-Ascon-AEAD128:                      hybrid r=64:
+Ascon-AEAD128:                      SipCon64:
   initialisation      12 cycles       initialisation      10 cycles  (p^10)
   per AD block         8 cycles       per AD block         6 cycles  (p^6)
   per message block    8 cycles       per message block    6 cycles  (p^6,
@@ -497,7 +497,7 @@ for r=64** (previously 8) — see the energy-per-bit figures below and §6.
 | design | functional check | pass rate | throughput | energy / bit |
 |---|---|---:|---:|---:|
 | Ascon-AEAD128 | official NIST KAT suite (1089 vectors) + 16×16 length grid vs. C ref, both directions | **1089/1089 enc, 1089/1089 dec** (KAT); 256/256 enc, 256/256 dec (grid) | 3,863 Mbit/s (FPGA), 4.170 Gbit/s (sky130) | 34 pJ (FPGA), 21 pJ (sky130) |
-| hybrid r=64 | directed C-vs-RTL simulation (see §1.1) — earlier self-generated KAT invalidated by the 2026-09-08 round change | ciphertext + tag match the C reference; C round-trips and rejects tampering | 1,487 Mbit/s (FPGA), 0.627 Gbit/s (sky130) | 56 pJ (FPGA), 32 pJ (sky130) |
+| SipCon64 | directed C-vs-RTL simulation (see §1.1) — earlier self-generated KAT invalidated by the 2026-09-08 round change | ciphertext + tag match the C reference; C round-trips and rejects tampering | 1,487 Mbit/s (FPGA), 0.627 Gbit/s (sky130) | 56 pJ (FPGA), 32 pJ (sky130) |
 | tinyjambu | official NIST KAT suite | **17127/17127 words** | 205 Mbit/s (FPGA), 0.267 Gbit/s (sky130) | 390 pJ (FPGA), 38 pJ (sky130) |
 | xoodyak | official NIST KAT suite | 19305/19305 words | 1,386 Mbit/s (FPGA), 2.091 Gbit/s (sky130) | 70 pJ (FPGA), 9 pJ (sky130) |
 | giftcofb | official NIST KAT suite | 19305/19305 words | 269 Mbit/s (FPGA), 0.525 Gbit/s (sky130) | 253 pJ (FPGA), 74 pJ (sky130) |
@@ -547,7 +547,7 @@ targets.** The previous edition had r=64 leading on FPGA, but that rested on
 Ascon's 55.0 MHz figure, which this re-measurement does not reproduce (§3.2).
 With Ascon at 241.4 MHz on FPGA and 260.6 MHz on sky130:
 
-| | Ascon-AEAD128 | hybrid r=64 |
+| | Ascon-AEAD128 | SipCon64 |
 |---|---:|---:|
 | FPGA Fmax | **241.4 MHz** | 139.4 MHz |
 | FPGA throughput | **3 863 Mbit/s** | 1 487 Mbit/s |

@@ -17,7 +17,7 @@ ARM Cortex-M0/M3 or AVR ATmega — expect different absolute numbers there,
 though the *relative* ordering between algorithms tends to travel
 reasonably well since it's driven by algorithm structure, not platform.
 
-Source: `../ascon-aead128/aead.c`, `../ascon-siphash/asconsip{,64}.c`, and
+Source: `../ascon-aead128/aead.c`, `../sipcon64/asconsip{,64}.c`, and
 the reference C in `../lwc-finalists/*/` — the same C this project's
 hardware work is transliterated from. Sparkle/Grain/etc.'s KAT/genkat
 test-harness files were excluded from the build.

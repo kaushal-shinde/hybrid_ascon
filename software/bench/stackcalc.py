@@ -19,7 +19,7 @@ BUILD = os.path.join(HERE, "build")
 
 ALGOS = {
     "ascon": ("bench_encrypt",),
-    "hybrid_r64": ("bench_encrypt",),
+    "sipcon64": ("bench_encrypt",),
     "tinyjambu": ("bench_encrypt",),
     "xoodyak": ("bench_encrypt",),
     "giftcofb": ("bench_encrypt",),

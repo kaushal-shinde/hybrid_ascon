@@ -127,7 +127,7 @@ def scatter(df):
         "photonbeetle": (0, -15, "center"),
         "sparkle": (0, -15, "center"),
         "elephant": (-2200, 3, "right"),
-        "hybrid r=64": (-1800, 9, "right"),
+        "SipCon64": (-1800, 9, "right"),
     }
     for _, r in df.iterrows():
         dx, dy, ha = offsets.get(r["design"], (0, 11, "center"))

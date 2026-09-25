@@ -1,4 +1,4 @@
-%%% Ascon-SipHash-r64 -- IEEE journal manuscript
+%%% SipCon64 -- IEEE journal manuscript
 %%%
 %%% Style: IEEE two-column journal format (IEEEtran v1.8b, 10 pt), per the
 %%% author guidelines at http://www.ieeeauthorcenter.ieee.org.
@@ -12,8 +12,66 @@
 \documentclass[journal,10pt]{IEEEtran}
 
 \usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{graphicx}
 \usepackage{url}
+
+%%% ------------------------------------------------------------------
+%%% Lightweight pseudocode environment.
+%%% The algorithm/algorithmic/algorithmicx packages are NOT present in this
+%%% TeX installation (checked with kpsewhich), and IEEEtran.cls is vendored
+%%% beside this file rather than installed, so the manuscript stays
+%%% self-contained instead of taking a dependency that will not build here.
+%%% Usage:
+%%%   \begin{algo}{Caption text}\label{alg:foo}
+%%%   line one
+%%%   \Ind indented line
+%%%   \end{algo}
+%%% One source line = one printed line (\obeylines).
+%%% ------------------------------------------------------------------
+\newcounter{alg}
+\newcounter{algln}
+\newlength{\algnumw}\setlength{\algnumw}{1.6em}   % line-number gutter
+\newlength{\alggap}\setlength{\alggap}{0.45em}    % gutter -> text gap
+\newlength{\algind}\setlength{\algind}{1.0em}     % one indent level
+%%% Wrapped in a minipage so the block is an unbreakable box: an algorithm
+%%% that does not fit in the remaining column moves to the next column whole,
+%%% instead of splitting and leaving a headerless remainder behind.
+\newenvironment{algo}[1]{%
+  \par\addvspace{6pt}\refstepcounter{alg}\setcounter{algln}{0}%
+  \noindent\begin{minipage}{\columnwidth}%
+  \hrule height0.9pt\relax
+  \vspace{1.5pt}%
+  \noindent\textbf{Algorithm~\thealg}\quad #1\par
+  \vspace{1pt}%
+  \hrule height0.4pt\relax
+  \vspace{1.5pt}%
+  \small\parindent=0pt\parskip=0pt\obeylines
+}{%
+  \par\vspace{1.5pt}%
+  \hrule height0.9pt\relax
+  \end{minipage}%
+  \par\addvspace{6pt}%
+}
+%%% \aln[n] starts a numbered line indented n levels; wrapped text hangs to
+%%% the text column. \aunn[n] is the same but unnumbered.
+\newcommand{\aln}[1][0]{%
+  \hangindent=\dimexpr\algnumw+\alggap+#1\algind\relax \hangafter=1
+  \stepcounter{algln}%
+  \makebox[\algnumw][r]{\footnotesize\thealgln:}\hspace{\alggap}%
+  \hspace*{#1\algind}\ignorespaces}
+\newcommand{\aunn}[1][0]{%
+  \hangindent=\dimexpr\algnumw+\alggap+#1\algind\relax \hangafter=1
+  \makebox[\algnumw][r]{}\hspace{\alggap}\hspace*{#1\algind}\ignorespaces}
+%%% Require/Ensure sit flush left -- no number gutter -- with wrapped text
+%%% hanging to the text column, as in the algorithmic package.
+\newcommand{\areq}[1]{\hangindent=\dimexpr\algnumw+\alggap\relax\hangafter=1\textbf{Require:} #1\ignorespaces}
+\newcommand{\aens}[1]{\hangindent=\dimexpr\algnumw+\alggap\relax\hangafter=1\textbf{Ensure:} #1\ignorespaces}
+%%% Phase headings sit flush left, starting in the number margin, and
+%%% label the numbered lines that follow them.
+\newcommand{\aphase}[1]{\hangindent=\dimexpr\algnumw+\alggap\relax\hangafter=1\textit{#1}:}
+\newcommand{\kw}[1]{\textbf{#1}}
+\newcommand{\cmt}[1]{{\itshape\,$\triangleright$ #1}}
 
 \begin{document}
 
@@ -38,7 +96,7 @@
 % CPU. Ascon's specification separates its duplex-sponge mode from the
 % permutation the mode invokes, which raises the question of what the mode costs
 % when that round function is exchanged for an Add--Rotate--XOR one. We define
-% Ascon-SipHash-r64, which retains Ascon's mode, round constants, key-injection
+% SipCon64, which retains Ascon's mode, round constants, key-injection
 % positions, padding rule and IV encoding over a 256-bit state of four 64-bit
 % words, and substitutes SipHash's SIPROUND for the S-box-and-linear-layer round.
 % We give a C reference and a round-per-cycle Verilog core, and evaluate eleven
@@ -72,11 +130,10 @@
 %%% with its section file as it is written.
 %%% ------------------------------------------------------------------
 
-\section{Preliminaries}
-\label{sec:prelim}
+\input{background}
 
-\section{The Ascon-SipHash-r64 Construction}
-\label{sec:construction}
+\input{architecture}
+
 
 \section{Implementation and Evaluation Flow}
 \label{sec:impl}

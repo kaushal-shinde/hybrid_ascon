@@ -1,12 +1,12 @@
 /*
- * Ascon-SipHash-r64 -- experimental hybrid AEAD.
- * See asconsip64.h for the design and for why this must not be used to protect
+ * SipCon64 -- experimental hybrid AEAD.
+ * See sipcon64.h for the design and for why this must not be used to protect
  * anything real.
  *
  * Rate is 64 bits, absorbed into x0 alone; x1, x2 and x3 form the 192-bit
- * capacity (matching Ascon-AEAD128's own capacity -- see asconsip64.h).
+ * capacity (matching Ascon-AEAD128's own capacity -- see sipcon64.h).
  */
-#include "asconsip64.h"
+#include "sipcon64.h"
 
 /* ---------------------------------------------------------------- bytes --- */
 
@@ -37,10 +37,10 @@ static uint64_t CLEARBYTES(uint64_t x, int n) {
 
 #define ROTL64(x, b) (uint64_t)(((x) << (b)) | ((x) >> (64 - (b))))
 
-static const uint8_t ASCONSIP64_RC[12] = {0xf0, 0xe1, 0xd2, 0xc3, 0xb4, 0xa5,
+static const uint8_t SIPCON64_RC[12] = {0xf0, 0xe1, 0xd2, 0xc3, 0xb4, 0xa5,
                                           0x96, 0x87, 0x78, 0x69, 0x5a, 0x4b};
 
-static void asconsip64_round(asconsip64_state_t* s, uint8_t C) {
+static void sipcon64_round(sipcon64_state_t* s, uint8_t C) {
   uint64_t v0 = s->x[0];
   uint64_t v1 = s->x[1];
   uint64_t v2 = s->x[2] ^ (uint64_t)C;
@@ -67,47 +67,47 @@ static void asconsip64_round(asconsip64_state_t* s, uint8_t C) {
   s->x[3] = v3;
 }
 
-void asconsip64_permutation(asconsip64_state_t* s, int rounds) {
+void sipcon64_permutation(sipcon64_state_t* s, int rounds) {
   int i;
   if (rounds < 0) rounds = 0;
   if (rounds > 12) rounds = 12;
-  for (i = 12 - rounds; i < 12; ++i) asconsip64_round(s, ASCONSIP64_RC[i]);
+  for (i = 12 - rounds; i < 12; ++i) sipcon64_round(s, SIPCON64_RC[i]);
 }
 
-#define PA(s) asconsip64_permutation((s), ASCONSIP64_PA_ROUNDS)
-#define PB(s) asconsip64_permutation((s), ASCONSIP64_PB_ROUNDS)
+#define PA(s) sipcon64_permutation((s), SIPCON64_PA_ROUNDS)
+#define PB(s) sipcon64_permutation((s), SIPCON64_PB_ROUNDS)
 
 /* --------------------------------------------------------------- the IV ---
  * Same encoding as Ascon-AEAD128's IV, but the rate field holds 8 instead
  * of 16. */
 
-#define ASCONSIP64_IV                                 \
+#define SIPCON64_IV                                 \
   (((uint64_t)(1) << 0) |            /* AEAD    */    \
-   ((uint64_t)(ASCONSIP64_PA_ROUNDS) << 16) |         \
-   ((uint64_t)(ASCONSIP64_PB_ROUNDS) << 20) |         \
-   ((uint64_t)(ASCONSIP64_TAGBYTES * 8) << 24) |      \
-   ((uint64_t)(ASCONSIP64_RATE) << 40) |              \
+   ((uint64_t)(SIPCON64_PA_ROUNDS) << 16) |         \
+   ((uint64_t)(SIPCON64_PB_ROUNDS) << 20) |         \
+   ((uint64_t)(SIPCON64_TAGBYTES * 8) << 24) |      \
+   ((uint64_t)(SIPCON64_RATE) << 40) |              \
    ((uint64_t)(0x53) << 48))         /* 'S': SipHash round core */
 
-static void asconsip64_init(asconsip64_state_t* s, uint64_t K0, uint64_t K1,
+static void sipcon64_init(sipcon64_state_t* s, uint64_t K0, uint64_t K1,
                             const unsigned char* npub) {
   s->x[0] = LOADBYTES(npub, 8);
   s->x[1] = LOADBYTES(npub + 8, 8);
   s->x[2] = K0;
-  s->x[3] = K1 ^ ASCONSIP64_IV;
+  s->x[3] = K1 ^ SIPCON64_IV;
   PA(s);
   s->x[2] ^= K0;
   s->x[3] ^= K1;
 }
 
-static void asconsip64_absorb_ad(asconsip64_state_t* s, const unsigned char* ad,
+static void sipcon64_absorb_ad(sipcon64_state_t* s, const unsigned char* ad,
                                  unsigned long long adlen) {
   if (adlen) {
-    while (adlen >= ASCONSIP64_RATE) {
+    while (adlen >= SIPCON64_RATE) {
       s->x[0] ^= LOADBYTES(ad, 8);
       PB(s);
-      ad += ASCONSIP64_RATE;
-      adlen -= ASCONSIP64_RATE;
+      ad += SIPCON64_RATE;
+      adlen -= SIPCON64_RATE;
     }
     s->x[0] ^= LOADBYTES(ad, (int)adlen);
     s->x[0] ^= PAD(adlen);
@@ -116,29 +116,29 @@ static void asconsip64_absorb_ad(asconsip64_state_t* s, const unsigned char* ad,
   s->x[3] ^= DSEP();
 }
 
-int asconsip64_aead_encrypt(unsigned char* c, unsigned long long* clen,
+int sipcon64_aead_encrypt(unsigned char* c, unsigned long long* clen,
                             const unsigned char* m, unsigned long long mlen,
                             const unsigned char* ad, unsigned long long adlen,
                             const unsigned char* nsec,
                             const unsigned char* npub, const unsigned char* k) {
-  asconsip64_state_t s;
+  sipcon64_state_t s;
   const uint64_t K0 = LOADBYTES(k, 8);
   const uint64_t K1 = LOADBYTES(k + 8, 8);
 
   (void)nsec;
-  *clen = mlen + ASCONSIP64_TAGBYTES;
+  *clen = mlen + SIPCON64_TAGBYTES;
 
-  asconsip64_init(&s, K0, K1, npub);
-  asconsip64_absorb_ad(&s, ad, adlen);
+  sipcon64_init(&s, K0, K1, npub);
+  sipcon64_absorb_ad(&s, ad, adlen);
 
   /* full plaintext blocks */
-  while (mlen >= ASCONSIP64_RATE) {
+  while (mlen >= SIPCON64_RATE) {
     s.x[0] ^= LOADBYTES(m, 8);
     STOREBYTES(c, s.x[0], 8);
     PB(&s);
-    m += ASCONSIP64_RATE;
-    c += ASCONSIP64_RATE;
-    mlen -= ASCONSIP64_RATE;
+    m += SIPCON64_RATE;
+    c += SIPCON64_RATE;
+    mlen -= SIPCON64_RATE;
   }
   /* final plaintext block */
   s.x[0] ^= LOADBYTES(m, (int)mlen);
@@ -158,35 +158,35 @@ int asconsip64_aead_encrypt(unsigned char* c, unsigned long long* clen,
   return 0;
 }
 
-int asconsip64_aead_decrypt(unsigned char* m, unsigned long long* mlen,
+int sipcon64_aead_decrypt(unsigned char* m, unsigned long long* mlen,
                             unsigned char* nsec, const unsigned char* c,
                             unsigned long long clen, const unsigned char* ad,
                             unsigned long long adlen,
                             const unsigned char* npub, const unsigned char* k) {
-  asconsip64_state_t s;
-  uint8_t t[ASCONSIP64_TAGBYTES];
+  sipcon64_state_t s;
+  uint8_t t[SIPCON64_TAGBYTES];
   const uint64_t K0 = LOADBYTES(k, 8);
   const uint64_t K1 = LOADBYTES(k + 8, 8);
   int i;
   int result = 0;
 
   (void)nsec;
-  if (clen < ASCONSIP64_TAGBYTES) return -1;
-  *mlen = clen - ASCONSIP64_TAGBYTES;
+  if (clen < SIPCON64_TAGBYTES) return -1;
+  *mlen = clen - SIPCON64_TAGBYTES;
 
-  asconsip64_init(&s, K0, K1, npub);
-  asconsip64_absorb_ad(&s, ad, adlen);
+  sipcon64_init(&s, K0, K1, npub);
+  sipcon64_absorb_ad(&s, ad, adlen);
 
   /* full ciphertext blocks */
-  clen -= ASCONSIP64_TAGBYTES;
-  while (clen >= ASCONSIP64_RATE) {
+  clen -= SIPCON64_TAGBYTES;
+  while (clen >= SIPCON64_RATE) {
     uint64_t c0 = LOADBYTES(c, 8);
     STOREBYTES(m, s.x[0] ^ c0, 8);
     s.x[0] = c0;
     PB(&s);
-    m += ASCONSIP64_RATE;
-    c += ASCONSIP64_RATE;
-    clen -= ASCONSIP64_RATE;
+    m += SIPCON64_RATE;
+    c += SIPCON64_RATE;
+    clen -= SIPCON64_RATE;
   }
   /* final ciphertext block */
   {
@@ -208,7 +208,7 @@ int asconsip64_aead_decrypt(unsigned char* m, unsigned long long* mlen,
   STOREBYTES(t, s.x[2], 8);
   STOREBYTES(t + 8, s.x[3], 8);
 
-  for (i = 0; i < ASCONSIP64_TAGBYTES; ++i) result |= c[i] ^ t[i];
+  for (i = 0; i < SIPCON64_TAGBYTES; ++i) result |= c[i] ^ t[i];
   result = (((result - 1) >> 8) & 1) - 1;
   return result;
 }

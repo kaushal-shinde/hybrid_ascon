@@ -4,7 +4,7 @@
     "n_functions": 9,
     "entry_frame": 48
   },
-  "hybrid_r64": {
+  "sipcon64": {
     "static_stack_bytes": 264,
     "n_functions": 10,
     "entry_frame": 48

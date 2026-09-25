@@ -26,7 +26,7 @@ case "$WORK" in *[[:space:]]*) echo "FLOW_WORK must not contain spaces: $WORK"; 
 mkdir -p "$WORK/rtl" "$WORK/out" "$WORK/logs"
 cp "$ROOT/verilog/"*.v "$WORK/rtl/"
 
-DESIGNS="ascon_aead128 asconsip64_aead tinyjambu_lwc xoodyak_lwc giftcofb_lwc
+DESIGNS="ascon_aead128 sipcon64_aead tinyjambu_lwc xoodyak_lwc giftcofb_lwc
          grain128aead_lwc sparkle_lwc elephant_lwc isap_lwc photonbeetle_lwc
          romulus_n_lwc"
 

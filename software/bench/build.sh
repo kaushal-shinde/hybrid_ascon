@@ -40,7 +40,7 @@ build() {
 FIN="$ROOT/lwc-finalists"
 
 build ascon "$ROOT/ascon-aead128" "-include api.h" aead.c
-build hybrid_r64 "$ROOT/ascon-siphash" "-DKEYBYTES=16 -DNPUBBYTES=16 -DABYTES=16 -DENCRYPT_FN=asconsip64_aead_encrypt -DDECRYPT_FN=asconsip64_aead_decrypt" asconsip64.c
+build sipcon64 "$ROOT/sipcon64" "-DKEYBYTES=16 -DNPUBBYTES=16 -DABYTES=16 -DENCRYPT_FN=sipcon64_aead_encrypt -DDECRYPT_FN=sipcon64_aead_decrypt" sipcon64.c
 build tinyjambu "$FIN/tinyjambu" "-include api.h" encrypt.c
 build xoodyak "$FIN/xoodyak" "-include api.h" encrypt.c Xoodyak.c Xoodoo-reference.c
 build giftcofb "$FIN/gift-cofb" "-include api.h" encrypt.c gift128.c

@@ -1,4 +1,4 @@
-# Software results: Ascon-AEAD128, an Ascon-SipHash hybrid, and the 9 NIST LWC finalists
+# Software results: Ascon-AEAD128, an SipCon64 hybrid, and the 9 NIST LWC finalists
 
 Software cost of the same eleven algorithms `RESULTS.md` measures in
 hardware — RAM, ROM, stack usage, throughput, latency, key/input/output
@@ -14,7 +14,7 @@ command: `software/bench/run_all.sh`.
 — see §1. And as with the hardware report: 10 of these 11 designs are now
 KAT-verified in this project (`RESULTS.md` §1.1) — Ascon-AEAD128 and all 9
 NIST finalists pass their official KAT/test-vector suites; only the
-Ascon-SipHash hybrid remains unverified against an official suite, because
+SipCon64 hybrid remains unverified against an official suite, because
 none exists for it (it is not a NIST submission). This is verification
 of the *hardware* RTL against known-answer vectors, not of this software
 report's own C measurements — the reference C measured here is what those
@@ -22,7 +22,7 @@ KAT vectors were generated from in the first place, so its correctness is
 assumed by construction, not separately re-proven in this report.
 
 **The hybrid's round counts changed on 2026-09-08**, from p^12/p^8 to
-**p^10/p^6** (`ascon-siphash/asconsip64.h`). Its numbers in this report are
+**p^10/p^6** (`sipcon64/sipcon64.h`). Its numbers in this report are
 for the new schedule and are **not comparable** with earlier editions — the
 other ten designs are unchanged. The reduction was taken for throughput; it
 lowers the security margin of a construction that has had no cryptanalysis
@@ -39,7 +39,7 @@ reference — see §1.1 of `RESULTS.md` and the note below.
 | Platform | **native x86_64**, this machine — no embedded cross-compiler installed |
 | CPU | Intel Core i7-6700, base 3.40 GHz, max turbo 4.0 GHz, `powersave` governor (not pinned) — see §6 caveat 6 |
 | Compiler | GCC 13.3.0, `-O2 -fPIC`, no LTO |
-| Source | official reference C: `ascon-aead128/`, `ascon-siphash/`, `lwc-finalists/*/` |
+| Source | official reference C: `ascon-aead128/`, `sipcon64/`, `lwc-finalists/*/` |
 | Harness | `software/bench/` — builds each algorithm as a `.so` behind a uniform `bench_*` ABI, `dlopen()`s each in turn |
 
 This machine has no ARM/AVR/RISC-V cross-compiler, and installing one was
@@ -83,7 +83,7 @@ status, carried over for context — see the note above. **Encrypt direction; se
 | design | key/npub/tag (B) | rate (B) | ROM | RAM | stack | latency | cycles/B | throughput |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
 | TinyJAMBU-128 † | 16/12/8 | 4 | **3,842 B** | 584 B | 280 B | 3,792 cyc | 84.3 | 37.8 MB/s |
-| hybrid r=64 ‡ | 16/16/16 | 8 | 4,322 B | 568 B | 264 B | **634 cyc** | **8.6** | **367.5 MB/s** |
+| SipCon64 ‡ | 16/16/16 | 8 | 4,322 B | 568 B | 264 B | **634 cyc** | **8.6** | **367.5 MB/s** |
 | GIFT-COFB † | 16/16/16 | 16 | 5,794 B | 584 B | 400 B | 49,658 cyc | 1,047.3 | 3.01 MB/s |
 | Elephant (Dumbo) † | 16/12/8 | 20 | 6,975 B | **1,744 B** | 648 B | 646,900 cyc | **13,150.5** | **0.24 MB/s** |
 | ISAP (ISAP-A-128A) † | 16/16/16 | 8 | 7,065 B | 680 B | 584 B | 68,126 cyc | 124.3 | 24.9 MB/s |
@@ -117,7 +117,7 @@ headers, written and checked earlier in this project).
 | design | rate (B/call) | rounds |
 |---|---:|---|
 | Ascon-AEAD128 | 16 | 12 init/final + 8 per block |
-| hybrid r=64 | 8 | 10 init/final + 6 per block |
+| SipCon64 | 8 | 10 init/final + 6 per block |
 | TinyJAMBU-128 | 4 | 1024 (key setup) + 640/1152 (per frame) |
 | Xoodyak | 16 | 12 (fixed, every permutation call) |
 | GIFT-COFB | 16 | 40 (GIFT-128) |
@@ -182,7 +182,7 @@ into this project).
 
 ### 4.4 The hybrid is the software speed leader here
 
-The Ascon-SipHash hybrid beats every finalist (and Ascon itself) on
+The SipCon64 hybrid beats every finalist (and Ascon itself) on
 latency and cycles/byte — 367.5 MB/s against Ascon's 277.0 — though not on
 stack usage, where Ascon-AEAD128 (232 B) is actually leanest of all eleven,
 ahead of the hybrid's own 264 B (§2). This matches the hardware story only
@@ -210,7 +210,7 @@ KAT runs against the RTL).
 Cost-wise, decrypt tracks encrypt closely for every design — see
 [`08_encrypt_vs_decrypt.png`](software/08_encrypt_vs_decrypt.png). On this
 run **all eleven are within ±3.1%** (encrypt vs. decrypt cycles/byte) — the
-largest gaps are hybrid r=64 (+3.1%, 8.63 → 8.90 cycles/byte) and
+largest gaps are SipCon64 (+3.1%, 8.63 → 8.90 cycles/byte) and
 Grain-128AEAD (−1.8%, 1,444.9 → 1,419.6); every other design is within ±0.6%.
 This is tighter agreement than an earlier pass of this same measurement
 showed (up to ±14% on some designs) — consistent with §6 caveat 6's
@@ -244,7 +244,7 @@ overhead) up to 59% (Elephant, whose small `.text` doesn't)**:
 |---|---:|---:|---:|---:|
 | Ascon-AEAD128 | 15,569 B | 13,815 B | 0 B | 1,754 B (11%) |
 | TinyJAMBU-128 | 3,842 B | 1,671 B | 0 B | 2,171 B (57%) |
-| hybrid r=64 | 4,322 B | 2,391 B | 12 B | 1,919 B (44%) |
+| SipCon64 | 4,322 B | 2,391 B | 12 B | 1,919 B (44%) |
 | GIFT-COFB | 5,794 B | 3,447 B | 40 B | 2,307 B (40%) |
 | Grain-128AEAD | 8,306 B | 4,343 B | 16 B | 3,947 B (48%) |
 | SPARKLE | 10,382 B | 5,575 B | 288 B | 4,519 B (44%) |
@@ -342,7 +342,7 @@ a real, not an approximate, worst case for the reference code as written.
    KAT-checked); it is now Ascon-AEAD128 plus all 9 finalists, after fixing
    42 real RTL bugs across 8 finalist cores and running the official KAT
    suite against the fixed RTL (`verilog/README.md`'s verification table).
-   Only the Ascon-SipHash hybrid remains unverified against an official
+   Only the SipCon64 hybrid remains unverified against an official
    suite, because none exists for it — it is not a NIST submission,
    only xsim-checked against its own C reference. Worth keeping straight
    regardless: this software report measures the *official reference C*

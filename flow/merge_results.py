@@ -22,7 +22,7 @@ ROOT = os.path.dirname(HERE)
 # module name -> the friendly name used throughout the reports
 NAMES = [
     ("ascon_aead128",    "Ascon-AEAD128"),
-    ("asconsip64_aead",  "hybrid r=64"),
+    ("sipcon64_aead",  "SipCon64"),
     ("tinyjambu_lwc",    "tinyjambu"),
     ("xoodyak_lwc",      "xoodyak"),
     ("giftcofb_lwc",     "giftcofb"),

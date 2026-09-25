@@ -1,4 +1,4 @@
-# Ascon-AEAD128, an Ascon-SipHash hybrid, and the NIST LWC finalists
+# Ascon-AEAD128, an SipCon64 hybrid, and the NIST LWC finalists
 
 Ascon-AEAD128 (NIST SP 800-232) implemented from the official C reference,
 one experimental Ascon/SipHash hybrid AEAD construction, and — for
@@ -7,7 +7,7 @@ to Ascon in the final round of NIST's Lightweight Cryptography competition.
 Everything here is either vendored official source or a from-scratch Verilog
 transliteration of one; nothing is a new cipher design except the hybrid,
 which has had no dedicated cryptanalysis of its own — see
-`ascon-siphash/README.md`. All eleven
+`sipcon64/README.md`. All eleven
 hardware cores — Ascon, the hybrid, and the nine finalists — live together
 in one directory and are measured together in one report, because that is
 what they are: Ascon and the field it beat, not two separate projects.
@@ -17,7 +17,7 @@ what they are: Ascon and the field it beat, not two separate projects.
 ```
 ascon-aead128/       official Ascon C reference (NIST SP 800-232), vendored
 siphash/              official SipHash C reference, vendored
-ascon-siphash/        the hybrid AEAD construction (C), see its README
+sipcon64/        the hybrid AEAD construction (C), see its README
 lwc-finalists/        official reference C of the 9 non-winning NIST LWC finalists
 verilog/              all 11 hardware cores — Ascon, the hybrid, 9 finalists — see its README
 RESULTS.md            Vivado + OpenROAD hardware measurements for all 11 verilog/ cores
@@ -28,7 +28,7 @@ software/             its CSV, charts, methodology notes, and reproducible bench
 
 Each vendored C directory (`ascon-aead128/`, `siphash/`, `lwc-finalists/*/`)
 keeps its own upstream README/license; `lwc-finalists/PROVENANCE.md` records
-exactly what was fetched from where. `ascon-siphash/` and `verilog/` are
+exactly what was fetched from where. `sipcon64/` and `verilog/` are
 this project's own work and each has a README explaining what's inside and
 how thoroughly each core has actually been checked.
 
@@ -55,7 +55,7 @@ or security recommendation.
 
 The eleven cores in `verilog/` do not all share one port convention, and
 being in one directory doesn't change that: `ascon_aead128.v` and
-`asconsip64_aead.v` implement a custom block-oriented
+`sipcon64_aead.v` implement a custom block-oriented
 interface (128-bit or 64-bit wide `din`/`dout`, explicit `din_ad`/
 `din_last`), documented at the top of `ascon_aead128.v`; the other nine
 implement the NIST LWC Hardware API (GMU CERG PDI/SDI/DO word-stream

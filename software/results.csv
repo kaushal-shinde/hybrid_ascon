@@ -1,6 +1,6 @@
 design,key_bytes,npub_bytes,tag_bytes,input_rate_bytes,rounds,rom_bytes,rom_dot_text_bytes,rom_dot_rodata_bytes,ram_bytes,stack_bytes,latency_cycles,cycles_per_byte,throughput_MBps,dec_latency_cycles,dec_cycles_per_byte,dec_throughput_MBps,dec_roundtrip_ok
 Ascon-AEAD128,16,16,16,16,12 init/final + 8 per block,15569,13815,0,560,232,1308.0,10.8345,276.97,1316.0,10.7754,269.82,1
-hybrid r=64,16,16,16,8,10 init/final + 6 per block,4322,2391,12,568,264,634.0,8.6323,367.46,652.0,8.9004,317.16,1
+SipCon64,16,16,16,8,10 init/final + 6 per block,4322,2391,12,568,264,634.0,8.6323,367.46,652.0,8.9004,317.16,1
 TinyJAMBU-128,16,12,8,4,1024 (key setup) + 640/1152 (frame),3842,1671,0,584,280,3792.0,84.3066,37.77,3828.0,84.5381,37.30,1
 Xoodyak,16,16,16,16,"12 (fixed, every call)",9520,4007,752,696,664,5808.0,81.5459,38.74,5814.0,81.3770,39.05,1
 GIFT-COFB,16,16,16,16,40 (GIFT-128),5794,3447,40,584,400,49658.0,1047.3271,3.01,49654.0,1047.2969,3.00,1

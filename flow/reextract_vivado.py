@@ -17,7 +17,7 @@ Usage: python3 reextract_vivado.py [--work DIR] [--out F]
 import argparse, csv, os, re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DESIGNS = ["ascon_aead128", "asconsip64_aead", "tinyjambu_lwc", "xoodyak_lwc",
+DESIGNS = ["ascon_aead128", "sipcon64_aead", "tinyjambu_lwc", "xoodyak_lwc",
            "giftcofb_lwc", "grain128aead_lwc", "sparkle_lwc", "elephant_lwc",
            "isap_lwc", "photonbeetle_lwc", "romulus_n_lwc"]
 

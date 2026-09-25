@@ -32,7 +32,7 @@ stack = json.load(open(os.path.join(HERE, "stack_results.json")))
 # own Verilog transliterations written and checked earlier this session)
 SPEC = {
     "ascon":        ("Ascon-AEAD128",       16, "12 init/final + 8 per block"),
-    "hybrid_r64":   ("hybrid r=64",           8, "10 init/final + 6 per block"),
+    "sipcon64":   ("SipCon64",           8, "10 init/final + 6 per block"),
     "tinyjambu":    ("TinyJAMBU-128",         4, "1024 (key setup) + 640/1152 (frame)"),
     "xoodyak":      ("Xoodyak",              16, "12 (fixed, every call)"),
     "giftcofb":     ("GIFT-COFB",            16, "40 (GIFT-128)"),
@@ -72,7 +72,7 @@ for label, r in raw.items():
     })
 
 # stable order matching the hardware report's designs-first-then-finalists
-order = ["ascon","hybrid_r64","tinyjambu","xoodyak","giftcofb",
+order = ["ascon","sipcon64","tinyjambu","xoodyak","giftcofb",
          "grain","sparkle","elephant","isap","photonbeetle","romulus"]
 rows_by_label = dict(zip(raw.keys(), rows))
 ordered = [rows_by_label[l] for l in order]

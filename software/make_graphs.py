@@ -5,7 +5,7 @@ Reads results.csv (in this same folder) and writes one PNG per chart, also
 into this folder. Plain white background, standard fonts, 300 DPI.
 
 Methodology: native x86_64 (no embedded cross-compiler on this machine),
-GCC -O2, reference C from ../ascon-aead128, ../ascon-siphash and
+GCC -O2, reference C from ../ascon-aead128, ../sipcon64 and
 ../lwc-finalists. See notes.md in this folder for what each column means
 and how it was measured.
 
@@ -96,7 +96,7 @@ def scatter(df):
     # not additive, or it lands nowhere near the point it's labeling)
     offsets = {
         "Ascon-AEAD128": (250, 1.12, "left"),
-        "hybrid r=64": (200, 0.82, "left"),
+        "SipCon64": (200, 0.82, "left"),
         "TinyJAMBU-128": (250, 1.18, "left"),
         "Xoodyak": (250, 0.80, "left"),
         "GIFT-COFB": (-200, 1.22, "right"),

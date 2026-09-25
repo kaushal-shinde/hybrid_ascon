@@ -21,7 +21,7 @@ ROOT = os.path.dirname(HERE)
 META = {
     "Ascon-AEAD128": ("16/16/16", 16, "12 init/final + 8 per block", "KAT-verified",
         "1089/1089 official NIST-format vectors, both directions"),
-    "hybrid r=64": ("16/16/16", 8, "10 init/final + 6 per block", "C/RTL cross-checked",
+    "SipCon64": ("16/16/16", 8, "10 init/final + 6 per block", "C/RTL cross-checked",
         "Round counts changed to p^10/p^6 on 2026-09-08; the earlier 1089-vector "
         "self-generated KAT was produced from the p^12/p^8 reference and NO LONGER "
         "APPLIES. Current evidence is a directed Vivado xsim run (24B AD / 40B message) "
@@ -160,7 +160,7 @@ def main():
     notes = [
         ("Scope", "All 11 designs' *official reference C* (not the Verilog RTL that "
             "RESULTS.md / hardware_analysis.xlsx measure): Ascon-AEAD128, one experimental "
-            "Ascon-SipHash hybrid (r=64), and the 9 NIST LWC finalists. Compiled natively "
+            "SipCon64 hybrid (r=64), and the 9 NIST LWC finalists. Compiled natively "
             "for x86_64 -- not an embedded target."),
         ("The hybrid's round counts changed", "The hybrid was reduced from p^12/p^8 to "
             "p^10/p^6 on 2026-09-08. Its numbers here are for the new schedule and are NOT "

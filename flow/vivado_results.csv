@@ -1,6 +1,6 @@
 design,period_ns,fmax_mhz,luts,regs,occupied_slices,logic_levels,wns_ns,unrouted,dyn_power_mw,static_power_mw,total_power_mw
 ascon_aead128,4.142,241.43,1122,728,348,3,+0.142,0,75.0,57.0,132.0
-asconsip64_aead,7.171,139.45,874,600,279,27,+0.017,0,26.0,57.0,83.0
+sipcon64_aead,7.171,139.45,874,600,279,27,+0.017,0,26.0,57.0,83.0
 tinyjambu_lwc,4.322,231.37,473,533,192,4,+0.283,0,23.0,57.0,80.0
 xoodyak_lwc,7.698,129.90,1554,885,491,8,+0.136,0,39.0,57.0,97.0
 giftcofb_lwc,8.334,119.99,1530,1005,475,11,+0.191,0,11.0,57.0,68.0

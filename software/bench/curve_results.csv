@@ -4,11 +4,11 @@ ascon,64,21.2188
 ascon,256,14.3203
 ascon,1024,11.2832
 ascon,4096,10.8477
-hybrid_r64,16,31.1250
-hybrid_r64,64,14.2500
-hybrid_r64,256,9.8594
-hybrid_r64,1024,8.8652
-hybrid_r64,4096,8.6445
+sipcon64,16,31.1250
+sipcon64,64,14.2500
+sipcon64,256,9.8594
+sipcon64,1024,8.8652
+sipcon64,4096,8.6445
 tinyjambu,16,184.7500
 tinyjambu,64,108.9062
 tinyjambu,256,89.9609

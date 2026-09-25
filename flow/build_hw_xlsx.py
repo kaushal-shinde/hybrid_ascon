@@ -25,7 +25,7 @@ ROOT = os.path.dirname(HERE)
 # elephant is a bracket: its block-boundary cost is not a repeatable constant.
 BITS_PER_CYCLE = {
     "Ascon-AEAD128": 16.0,      # 128-bit rate / 8 cycles  (p^12 / p^8)
-    "hybrid r=64":   64.0 / 6,  #  64-bit rate / 6 cycles  (p^10 / p^6)
+    "SipCon64":   64.0 / 6,  #  64-bit rate / 6 cycles  (p^10 / p^6)
     "tinyjambu":      0.8873,
     "xoodyak":       10.667,
     "giftcofb":       2.2432,
@@ -174,7 +174,7 @@ def main():
     ws["A1"].font = TITLE_FONT
     notes = [
         ("Scope", "All 11 designs in verilog/: Ascon-AEAD128 (NIST SP 800-232), one "
-                  "experimental Ascon-SipHash hybrid (r=64), and the 9 NIST LWC finalists "
+                  "experimental SipCon64 hybrid (r=64), and the 9 NIST LWC finalists "
                   "that lost to Ascon."),
         ("One flow, all eleven", "Every figure on both sheets comes from a single "
                   "measurement procedure applied identically to all 11 designs: the same "

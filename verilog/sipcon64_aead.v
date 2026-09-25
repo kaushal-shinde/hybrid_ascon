@@ -1,14 +1,14 @@
-// Ascon-SipHash hybrid AEAD: 64-bit rate, 192-bit capacity.
+// SipCon64 hybrid AEAD: 64-bit rate, 192-bit capacity.
 // Round-based, one permutation round per cycle.
 //
-// Functional twin of ascon-siphash/asconsip64.c. 256-bit state (x0..x3, 64
+// Functional twin of sipcon64/sipcon64.c. 256-bit state (x0..x3, 64
 // bits each); rate is x0 alone (64 bits), capacity is x1,x2,x3 (192 bits),
 // data port is 64 bits wide, throughput is 64/6 = 10.67 bits/cycle.
 //
 // The 192-bit capacity is the point: it matches Ascon-AEAD128's own capacity
 // in a 256-bit state.
 //
-// WARNING: experimental, unanalysed construction. See ascon-siphash/asconsip64.h.
+// WARNING: experimental, unanalysed construction. See sipcon64/sipcon64.h.
 //
 // Byte order is little-endian, din[7:0] is the first byte of the block.
 //
@@ -24,7 +24,7 @@
 //
 // Cycles: 10 init + 6 per AD block + 6 per non-final message block + 10 final.
 
-module asconsip64_aead (
+module sipcon64_aead (
     input  wire        clk,
     input  wire        rst_n,
 

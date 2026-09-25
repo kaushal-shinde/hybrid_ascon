@@ -1,5 +1,5 @@
 /*
- * Ascon-SipHash-r64 -- experimental hybrid AEAD.
+ * SipCon64 -- experimental hybrid AEAD.
  *
  * WARNING: this is a NEW, UNANALYSED construction. It is not Ascon, it is not
  * SipHash, it is not standardised, and it has had no cryptanalysis. Do not use
@@ -52,8 +52,8 @@
  * Bytes are loaded and stored little-endian, matching both the Ascon SP 800-232
  * reference code and SipHash.
  */
-#ifndef ASCONSIP64_H_
-#define ASCONSIP64_H_
+#ifndef SIPCON64_H_
+#define SIPCON64_H_
 
 #include <stdint.h>
 
@@ -61,23 +61,23 @@
 extern "C" {
 #endif
 
-#define ASCONSIP64_KEYBYTES 16
-#define ASCONSIP64_NONCEBYTES 16
-#define ASCONSIP64_TAGBYTES 16
-#define ASCONSIP64_RATE 8
-#define ASCONSIP64_STATEWORDS 4
-#define ASCONSIP64_PA_ROUNDS 10
-#define ASCONSIP64_PB_ROUNDS 6
+#define SIPCON64_KEYBYTES 16
+#define SIPCON64_NONCEBYTES 16
+#define SIPCON64_TAGBYTES 16
+#define SIPCON64_RATE 8
+#define SIPCON64_STATEWORDS 4
+#define SIPCON64_PA_ROUNDS 10
+#define SIPCON64_PB_ROUNDS 6
 
 typedef struct {
-  uint64_t x[ASCONSIP64_STATEWORDS];
-} asconsip64_state_t;
+  uint64_t x[SIPCON64_STATEWORDS];
+} sipcon64_state_t;
 
 /* The permutation on its own, for analysis. rounds is clamped to 0..12. */
-void asconsip64_permutation(asconsip64_state_t* s, int rounds);
+void sipcon64_permutation(sipcon64_state_t* s, int rounds);
 
-/* c receives mlen + ASCONSIP64_TAGBYTES bytes. nsec is unused, pass NULL. */
-int asconsip64_aead_encrypt(unsigned char* c, unsigned long long* clen,
+/* c receives mlen + SIPCON64_TAGBYTES bytes. nsec is unused, pass NULL. */
+int sipcon64_aead_encrypt(unsigned char* c, unsigned long long* clen,
                             const unsigned char* m, unsigned long long mlen,
                             const unsigned char* ad, unsigned long long adlen,
                             const unsigned char* nsec,
@@ -85,7 +85,7 @@ int asconsip64_aead_encrypt(unsigned char* c, unsigned long long* clen,
 
 /* Returns 0 if the tag verifies, -1 otherwise. On failure the contents of m
  * are unspecified and must not be used. */
-int asconsip64_aead_decrypt(unsigned char* m, unsigned long long* mlen,
+int sipcon64_aead_decrypt(unsigned char* m, unsigned long long* mlen,
                             unsigned char* nsec, const unsigned char* c,
                             unsigned long long clen, const unsigned char* ad,
                             unsigned long long adlen,
@@ -95,4 +95,4 @@ int asconsip64_aead_decrypt(unsigned char* m, unsigned long long* mlen,
 }
 #endif
 
-#endif /* ASCONSIP64_H_ */
+#endif /* SIPCON64_H_ */

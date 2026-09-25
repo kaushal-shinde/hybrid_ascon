@@ -1,0 +1,59 @@
+% IEEE TCAD -- Background and Motivation
+% Included by main.tex; do not compile standalone.
+%
+% Structural details were read off the sources vendored in this repository,
+% not quoted from the specifications:
+%   Ascon-AEAD128 mode      ascon-aead128/aead.c    (ASCON_128A_IV path)
+%   Ascon round function    ascon-aead128/round.h
+%   SIPROUND                siphash/siphash.c
+% Kept deliberately brief: Section~\ref{sec:construction} specifies the hybrid
+% in full, so this section only establishes why the substitution is worth
+% making. Notation: $\oplus$ exclusive-or, $\boxplus$ addition mod $2^{64}$,
+% ROL/ROR rotation, all words 64 bits.
+
+\section{Background and Motivation}
+\label{sec:background}
+
+\subsection{From AES to Lightweight AEAD}
+
+AES \cite{fips197} is the standard against which lightweight encryption is measured, and it struggles on small devices for specific reasons. Fast software versions use memory tables, making their timing vary and leaving them open to cache-timing attacks \cite{aes-cache}. Versions without tables avoid this but are much slower. On physical chips, its S-box uses a lot of logic gates, and protecting it from power-monitoring attacks is very expensive. Also, AES only hides data; it needs extra steps and more space or time to prove the data hasn't been tampered with.
+
+Lightweight options that came before the NIST Lightweight Cryptography process solved some problems but created others. Ciphers like PRESENT, SIMON, and SPECK \cite{simonspeck} take up very little space, but most use 64-bit blocks, which limits how much data they can safely process. None of them provide built-in authentication.
+
+\subsection{Ascon}
+
+Ascon \cite{caesar,nist-sp800-232} fixes both problems at once. It uses a 320-bit core process (a permutation) inside a sponge design. The data enters and leaves through a ``rate'' section, while a ``capacity'' section remains untouched to keep the system secure \cite{sponge,duplex}. It encrypts and authenticates data at the exact same time, so it doesn't need extra pieces, and it can also hash data. Ascon won the CAESAR lightweight competition and was chosen as the NIST standard in 2023 \cite{nist-lwc-final}, becoming SP 800-232 \cite{nist-sp800-232}.
+
+Inside Ascon, one round adds a constant, applies a 5-bit S-box, and then mixes the data. The S-box uses a method called \emph{bitslicing}, where basic math operations process 64 S-boxes at once. This makes Ascon very cheap to protect against power attacks.
+
+This setup is perfect for physical hardware---it takes very few gates and causes no delays, measuring just three logic levels deep as shown in Section~\ref{sec:results}. However, it is terrible for software. Regular processors cannot run bitsliced math natively, so the software must use a lot of code to fake it. This results in the largest software program among all eleven designs we tested.
+
+\subsection{Why SipHash}
+
+SipHash \cite{siphash} has the exact opposite strengths. It is an Add--Rotate--XOR (ARX) design. Its inner engine, SIPROUND, relies entirely on basic addition, rotation, and XOR steps on a 256-bit state of four words $(v_0,v_1,v_2,v_3)$,
+\begin{equation}
+\begin{array}{ll}
+v_0 \mathrel{+}= v_1 & v_2 \mathrel{+}= v_3\\
+v_1 \mathrel{\lll}= 13 \qquad & v_3 \mathrel{\lll}= 16\\
+v_1 \mathrel{\oplus}= v_0 & v_3 \mathrel{\oplus}= v_2\\
+v_0 \mathrel{\lll}= 32 & \\[2pt]
+v_2 \mathrel{+}= v_1 & v_0 \mathrel{+}= v_3\\
+v_1 \mathrel{\lll}= 17 & v_3 \mathrel{\lll}= 21\\
+v_1 \mathrel{\oplus}= v_2 & v_3 \mathrel{\oplus}= v_0\\
+v_2 \mathrel{\lll}= 32 &
+\end{array}
+\label{eq:sipround}
+\end{equation}
+
+This adds up to four additions, six rotations, and four XORs. Three things make this great for our experiment. First, a standard 64-bit processor can run every step in a single, fast instruction without needing lookup tables. This makes it compact, fast, and safe from timing attacks in software, much like ChaCha20 \cite{chacha}. Second, it is highly trusted, with a decade of real-world use and security testing. Third, it is small, using four words instead of Ascon's five.
+
+We write \eqref{eq:sipround} in the two-column form used by its designers \cite{siphash}, because the columns carry information: the left and right halves of each block are independent and may be evaluated at the same time. Note that the two columns exchange partners between the upper and lower blocks---$v_0$ pairs with $v_1$ and then with $v_3$---which is the crossing visible in a datapath drawing of the round.
+
+That structure is what fixes its hardware cost. Every addition forces the chip to carry numbers down a 64-bit chain, and \eqref{eq:sipround} contains four of them, but they are not linked end to end: the upper two take independent inputs, and the lower two each wait on both upper results while remaining independent of one another. One round therefore costs \emph{two} chained additions, not four. Two is still enough to dominate the delay, because no rearrangement of the surrounding rotations and XORs shortens a carry chain.
+
+\subsection{Motivation}
+\label{sec:motivation}
+
+The S-box is the only reason Ascon is bulky in software. The rest of its math maps perfectly to normal software instructions. In hardware, that same S-box costs almost nothing. The software problem is tied to one specific part for a specific reason.
+
+Because Ascon's outer structure (the mode) is completely separate from its inner engine, we can swap the engine while keeping the keys, padding, and security setup exactly the same. This allows for a direct experiment: replace the part that causes software bloat with an engine built from basic CPU instructions, keep everything else the same, and measure the results. Since SIPROUND mixes data well on its own, it replaces both Ascon's S-box and its mixing layer.
