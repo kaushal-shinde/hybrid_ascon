@@ -1,0 +1,18 @@
+validating the SP 800-22 implementation (32 sequences x 1000000 bits, alpha=0.01)
+
+control stream         expect  sub-tests  failed    exp  suite  verdict
+--------------------------------------------------------------------------
+os.urandom             PASS          188       4   1.06  PASS   ok
+all-zero bytes         FAIL          162     162   0.66  FAIL   ok
+64-bit counter         FAIL          162     161   0.66  FAIL   ok
+LCG low byte           FAIL          188     188   0.77  FAIL   ok
+SipCon64 p^1 (ctr)     FAIL          162     161   0.66  FAIL   ok
+
+p-value uniformity on os.urandom (the assumption the whole two-level
+assessment rests on):
+  sub-tests                      188
+  mean pass proportion           0.9883 (expected ~0.99)
+  uniformity P_T < 0.0001        1
+
+validation passed: the suite accepts the CSPRNG, rejects all four weak streams
+including a 1-round SipCon64, and its p-values are uniform on random input.

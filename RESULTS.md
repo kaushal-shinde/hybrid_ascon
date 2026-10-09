@@ -710,7 +710,12 @@ it.
     analysis backs either the old counts or the new ones; establishing the
     margin for p^10/p^6 is future work. Nothing in this file is a security
     claim — performance numbers say nothing about whether the construction
-    is sound.
+    is sound. `security/SECURITY-RESULTS.md` now puts one measured number
+    against this: the hybrid's permutation saturates its diffusion statistics
+    (avalanche, SAC, SP 800-22) at 5 rounds, so p^6 runs one round above
+    saturation and p^10 runs five above. That is a statistical observation, not
+    a security margin — it bounds no attack — but it is the direction the
+    reduction moved.
 13. These are eleven different algorithms with different security margins,
     round counts and tag sizes — smaller/faster is not "better" in isolation;
     it is one input into a tradeoff that also depends on each algorithm's

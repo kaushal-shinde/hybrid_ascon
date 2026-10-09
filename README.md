@@ -24,6 +24,7 @@ RESULTS.md            Vivado + OpenROAD hardware measurements for all 11 verilog
 graphs/               PNG charts + CSV + Python script for RESULTS.md's data
 SOFTWARE-RESULTS.md   native x86_64 software measurements (RAM/ROM/stack/latency/throughput) for all 11
 software/             its CSV, charts, methodology notes, and reproducible benchmark harness
+security/             statistical security analysis of the hybrid — see below
 ```
 
 Each vendored C directory (`ascon-aead128/`, `siphash/`, `lwc-finalists/*/`)
@@ -62,6 +63,23 @@ implement the NIST LWC Hardware API (GMU CERG PDI/SDI/DO word-stream
 protocol) instead. The two are not port-compatible — see `verilog/README.md`
 for which is which and why — but they are still one comparison at the
 algorithm level, which is what `RESULTS.md` measures.
+
+## Security analysis
+
+`security/` adds a third study, and unlike the other two it covers the hybrid
+alone, scored against absolute references rather than against another cipher:
+round-wise avalanche (plus the strict avalanche criterion and word-level
+diffusion behind it) and the full NIST SP 800-22 randomness suite.
+`security/SECURITY-RESULTS.md` reports it.
+
+The hybrid passes everything there, but **this is not cryptanalysis and does not
+change the "no dedicated cryptanalysis" status** recorded in `sipcon64/README.md`
+and `RESULTS.md` §8.3 — every serious cipher passes these tests, including ones
+later broken. What it does establish is that the permutation reaches ideal 50%
+avalanche at 4 rounds and is statistically saturated by 5, which puts a number
+on what the 2026-09-08 reduction to p^10/p^6 cost: p^6 now runs one round above
+saturation. It also locates where the last reduced-round bias sits — 87.5% of it
+on paths into or out of the rate word x0, the one an attacker reads and writes.
 
 ## Hardware vs. software
 

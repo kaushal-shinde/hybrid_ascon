@@ -1,0 +1,18 @@
+SipCon64 harness self-tests
+  reference is the p^10/p^6 schedule                             ok
+  256-bit state, 64-bit rate                                     ok
+  key / nonce / tag are 128 bits each                            ok
+  p^12 of the zero state matches the pinned vector               ok
+  AEAD encrypt matches the pinned ciphertext and tag             ok
+  p^12 != p^6 o p^6 (tail schedule, not a shared prefix)         ok
+  p^r moves the state for every r = 1..12                        ok
+  a one-bit input change reaches p^6                             ok
+  bit indexing: bit 200 is bit 8 of x3                           ok
+  bit indexing: bits 0..63 are x0, the rate word                 ok
+  first ciphertext block is rate XOR plaintext                   ok
+  the duplex absorbs C, so later blocks are plaintext-dependent  ok
+  AEAD round-trips (200 random messages)                         ok
+  AEAD rejects a single-bit ciphertext/tag flip                  ok
+  harness PRNG is not degenerate                                 ok
+
+all self-tests passed (0 failure(s))

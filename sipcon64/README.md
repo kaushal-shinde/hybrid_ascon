@@ -7,6 +7,13 @@ performed.** Its security rationale rests on the maturity of the two
 components it combines — Ascon's mode and SipHash's round — as argued in
 `../paper/related-work.tex`; analysis of the combination itself is future work.
 
+Statistical analysis of this construction — round-wise avalanche, the strict
+avalanche criterion, word-level diffusion and NIST SP 800-22 — is in
+`../security/`. It finds no statistical defect: avalanche reaches the ideal 50%
+at 4 rounds and the permutation is statistically saturated by 5, so the deployed
+p^6 and p^10 both clear it, and every SP 800-22 stream passes. That is not
+cryptanalysis, so the sentence above still stands unchanged.
+
 `sipcon64.c` / `.h` shares Ascon-AEAD128's 256-bit state (`x0..x3`, 64
 bits each) and the same duplex sponge structure, but replaces Ascon's round
 function with SipHash's SIPROUND. Its round schedule is `p^10` for

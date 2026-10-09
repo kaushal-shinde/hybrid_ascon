@@ -1,0 +1,587 @@
+=== 0. build ===================================================
+built.
+
+=== 1. harness self-tests ======================================
+SipCon64 harness self-tests
+  reference is the p^10/p^6 schedule                             ok
+  256-bit state, 64-bit rate                                     ok
+  key / nonce / tag are 128 bits each                            ok
+  p^12 of the zero state matches the pinned vector               ok
+  AEAD encrypt matches the pinned ciphertext and tag             ok
+  p^12 != p^6 o p^6 (tail schedule, not a shared prefix)         ok
+  p^r moves the state for every r = 1..12                        ok
+  a one-bit input change reaches p^6                             ok
+  bit indexing: bit 200 is bit 8 of x3                           ok
+  bit indexing: bits 0..63 are x0, the rate word                 ok
+  first ciphertext block is rate XOR plaintext                   ok
+  the duplex absorbs C, so later blocks are plaintext-dependent  ok
+  AEAD round-trips (200 random messages)                         ok
+  AEAD rejects a single-bit ciphertext/tag flip                  ok
+  harness PRNG is not degenerate                                 ok
+
+all self-tests passed (0 failure(s))
+
+=== 2. validate the SP 800-22 implementation ===================
+validating the SP 800-22 implementation (32 sequences x 1000000 bits, alpha=0.01)
+
+control stream         expect  sub-tests  failed    exp  suite  verdict
+--------------------------------------------------------------------------
+os.urandom             PASS          188       4   1.06  PASS   ok
+all-zero bytes         FAIL          162     162   0.66  FAIL   ok
+64-bit counter         FAIL          162     161   0.66  FAIL   ok
+LCG low byte           FAIL          188     188   0.77  FAIL   ok
+SipCon64 p^1 (ctr)     FAIL          162     161   0.66  FAIL   ok
+
+p-value uniformity on os.urandom (the assumption the whole two-level
+assessment rests on):
+  sub-tests                      188
+  mean pass proportion           0.9883 (expected ~0.99)
+  uniformity P_T < 0.0001        1
+
+validation passed: the suite accepts the CSPRNG, rejects all four weak streams
+including a 1-round SipCon64, and its p-values are uniform on random input.
+
+=== 3. round-wise avalanche, SAC, word diffusion ===============
+SipCon64 permutation: 256-bit state, 32768 samples x 256 input bits x 12 rounds = 100.66 M differential pairs, 8 thread(s)
+
+=== 4. AEAD-level avalanche ====================================
+SipCon64 AEAD: 2048 samples, 64-byte message, 16-byte AD, 896 input bits per sample
+
+=== 5. generate bitstreams =====================================
+SipCon64/ctstream r=0: wrote 15.26 MB to streams/ctstream.bin
+SipCon64/tag r=0: wrote 15.26 MB to streams/tag.bin
+SipCon64/permctr r=10: wrote 15.30 MB to streams/perm_r10.bin
+SipCon64/permctr r=6: wrote 15.30 MB to streams/perm_r6.bin
+SipCon64/permctr_rate r=6: wrote 15.30 MB to streams/permrate_r6.bin
+SipCon64/permctr r=1: wrote 3.87 MB to streams/sweep_r1.bin
+SipCon64/permctr r=2: wrote 3.87 MB to streams/sweep_r2.bin
+SipCon64/permctr r=3: wrote 3.87 MB to streams/sweep_r3.bin
+SipCon64/permctr r=4: wrote 3.87 MB to streams/sweep_r4.bin
+SipCon64/permctr r=5: wrote 3.87 MB to streams/sweep_r5.bin
+SipCon64/permctr r=6: wrote 3.87 MB to streams/sweep_r6.bin
+SipCon64/permctr r=7: wrote 3.87 MB to streams/sweep_r7.bin
+SipCon64/permctr r=8: wrote 3.87 MB to streams/sweep_r8.bin
+SipCon64/permctr r=9: wrote 3.87 MB to streams/sweep_r9.bin
+SipCon64/permctr r=10: wrote 3.87 MB to streams/sweep_r10.bin
+SipCon64/permctr r=11: wrote 3.87 MB to streams/sweep_r11.bin
+SipCon64/permctr r=12: wrote 3.87 MB to streams/sweep_r12.bin
+
+=== 6. randomness tests ========================================
+ctstream: 188 sub-tests, 3 failed (expected 1.78 by chance), suite p=0.2644, min proportion 0.9609 -> PASS
+    fail non-overlapping[077]                     prop=0.9609 (min 0.9636)  unif=0.909344
+    fail non-overlapping[460]                     prop=0.9609 (min 0.9636)  unif=0.509162
+    fail non-overlapping[474]                     prop=0.9609 (min 0.9636)  unif=0.075865
+tag: 188 sub-tests, 1 failed (expected 1.73 by chance), suite p=0.8229, min proportion 0.9609 -> PASS
+    fail non-overlapping[085]                     prop=0.9609 (min 0.9636)  unif=0.620855
+perm_r10: 188 sub-tests, 0 failed (expected 1.67 by chance), suite p=1, min proportion 0.9688 -> PASS
+perm_r6: 188 sub-tests, 2 failed (expected 1.82 by chance), suite p=0.5431, min proportion 0.9512 -> PASS
+    fail non-overlapping[440]                     prop=0.9609 (min 0.9636)  unif=0.121218
+    fail random-excursions-variant[+7]            prop=0.9512 (min 0.9570)  unif=0.868853
+permrate_r6: 188 sub-tests, 3 failed (expected 1.71 by chance), suite p=0.2452, min proportion 0.9531 -> PASS
+    fail non-overlapping[023]                     prop=0.9531 (min 0.9636)  unif=0.434395
+    fail non-overlapping[085]                     prop=0.9609 (min 0.9636)  unif=0.151616
+    fail non-overlapping[426]                     prop=0.9609 (min 0.9636)  unif=0.204643
+r1: 162 sub-tests, 161 failed (expected 0.66 by chance), suite p=0, min proportion 0.0000 -> FAIL
+    fail approximate-entropy                      prop=0.0000 (min 0.9372)  unif=0.000000
+    fail block-frequency                          prop=0.0000 (min 0.9372)  unif=0.000000
+    fail cusum-backward                           prop=0.0000 (min 0.9372)  unif=0.000000
+    fail cusum-forward                            prop=0.0000 (min 0.9372)  unif=0.000000
+    fail dft-spectral                             prop=0.0000 (min 0.9372)  unif=0.000000
+    fail frequency                                prop=0.0000 (min 0.9372)  unif=0.000000
+    fail longest-run                              prop=0.0312 (min 0.9372)  unif=0.000000
+    fail matrix-rank                              prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[001]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[003]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[005]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[007]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[009]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[011]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[013]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[015]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[017]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[019]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[021]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[023]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[025]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[027]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[029]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[031]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[035]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[037]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[039]                     prop=0.0625 (min 0.9372)  unif=0.000000
+    fail non-overlapping[041]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[043]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[045]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[047]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[051]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[053]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[055]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[057]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[059]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[061]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[063]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[067]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[069]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[071]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[075]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[077]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[079]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[083]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[085]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[087]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[091]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[093]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[095]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[101]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[103]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[107]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[109]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[111]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[117]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[119]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[123]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[125]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[127]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[131]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[135]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[139]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[143]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[147]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[151]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[155]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[159]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[163]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[167]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[171]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[175]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[179]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[183]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[187]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[191]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[199]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[207]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[215]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[223]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[239]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[255]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[256]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[272]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[288]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[296]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[304]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[312]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[320]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[324]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[328]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[332]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[336]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[340]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[344]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[348]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[352]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[356]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[360]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[364]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[368]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[372]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[376]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[380]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[384]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[386]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[388]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[392]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[394]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[400]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[402]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[404]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[408]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[410]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[416]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[418]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[420]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[424]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[426]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[428]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[432]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[434]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[436]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[440]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[442]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[444]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[448]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[450]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[452]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[454]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[456]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[458]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[460]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[464]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[466]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[468]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[470]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[472]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[474]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[476]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[480]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[482]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[484]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[486]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[488]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[490]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[492]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[494]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[496]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[498]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[500]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[502]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[504]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[506]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[508]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[510]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail overlapping                              prop=0.0000 (min 0.9372)  unif=0.000000
+    fail runs                                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail serial-1                                 prop=0.0000 (min 0.9372)  unif=0.000000
+    fail serial-2                                 prop=0.0000 (min 0.9372)  unif=0.000000
+    fail universal                                prop=0.0000 (min 0.9372)  unif=0.000000
+r2: 162 sub-tests, 161 failed (expected 0.66 by chance), suite p=0, min proportion 0.0000 -> FAIL
+    fail approximate-entropy                      prop=0.0000 (min 0.9372)  unif=0.000000
+    fail block-frequency                          prop=0.0938 (min 0.9372)  unif=0.000000
+    fail cusum-backward                           prop=0.0000 (min 0.9372)  unif=0.000000
+    fail cusum-forward                            prop=0.0000 (min 0.9372)  unif=0.000000
+    fail dft-spectral                             prop=0.0000 (min 0.9372)  unif=0.000000
+    fail frequency                                prop=0.0000 (min 0.9372)  unif=0.000000
+    fail longest-run                              prop=0.2188 (min 0.9372)  unif=0.000000
+    fail matrix-rank                              prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[001]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[003]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[005]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[007]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[009]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[011]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[013]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[015]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[017]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[019]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[021]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[023]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[025]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[027]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[029]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[031]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[035]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[037]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[039]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[041]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[043]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[045]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[047]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[051]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[053]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[055]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[057]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[059]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[061]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[063]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[067]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[069]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[071]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[075]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[077]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[079]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[083]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[085]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[087]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[091]                     prop=0.0938 (min 0.9372)  unif=0.000000
+    fail non-overlapping[093]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[095]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[101]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[103]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[107]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[109]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[111]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[117]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[119]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[123]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[125]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[127]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[131]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[135]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[139]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[143]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[147]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[151]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[155]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[159]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[163]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[167]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[171]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[175]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[179]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[183]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[187]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[191]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[199]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[207]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[215]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[223]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[239]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[255]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[256]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[272]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[288]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[296]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[304]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[312]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[320]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[324]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[328]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[332]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[336]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[340]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[344]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[348]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[352]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[356]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[360]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[364]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[368]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[372]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[376]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[380]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[384]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[386]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[388]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[392]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[394]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[400]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[402]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[404]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[408]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[410]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[416]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[418]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[420]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[424]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[426]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[428]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[432]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[434]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[436]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[440]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[442]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[444]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[448]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[450]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[452]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[454]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[456]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[458]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[460]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[464]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[466]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[468]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[470]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[472]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[474]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[476]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[480]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[482]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[484]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[486]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[488]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[490]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[492]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[494]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[496]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[498]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[500]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[502]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[504]                     prop=0.0312 (min 0.9372)  unif=0.000000
+    fail non-overlapping[506]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[508]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[510]                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail overlapping                              prop=0.0000 (min 0.9372)  unif=0.000000
+    fail runs                                     prop=0.0000 (min 0.9372)  unif=0.000000
+    fail serial-1                                 prop=0.0000 (min 0.9372)  unif=0.000000
+    fail serial-2                                 prop=0.0000 (min 0.9372)  unif=0.000000
+    fail universal                                prop=0.1562 (min 0.9372)  unif=0.000000
+r3: 188 sub-tests, 141 failed (expected 2.43 by chance), suite p=1.244e-190, min proportion 0.0000 -> FAIL
+    fail approximate-entropy                      prop=0.0000 (min 0.9372)  unif=0.000000
+    fail block-frequency                          prop=0.8125 (min 0.9372)  unif=0.000063
+    fail cusum-backward                           prop=0.2188 (min 0.9372)  unif=0.000000
+    fail cusum-forward                            prop=0.1875 (min 0.9372)  unif=0.000000
+    fail dft-spectral                             prop=0.0000 (min 0.9372)  unif=0.000000
+    fail frequency                                prop=0.4375 (min 0.9372)  unif=0.000000
+    fail matrix-rank                              prop=0.8750 (min 0.9372)  unif=0.094427
+    fail non-overlapping[001]                     prop=0.4688 (min 0.9372)  unif=0.000000
+    fail non-overlapping[003]                     prop=0.8125 (min 0.9372)  unif=0.000000
+    fail non-overlapping[005]                     prop=0.7500 (min 0.9372)  unif=0.000008
+    fail non-overlapping[007]                     prop=0.6875 (min 0.9372)  unif=0.000000
+    fail non-overlapping[009]                     prop=0.6250 (min 0.9372)  unif=0.000000
+    fail non-overlapping[011]                     prop=0.7500 (min 0.9372)  unif=0.000000
+    fail non-overlapping[013]                     prop=0.9062 (min 0.9372)  unif=0.000049
+    fail non-overlapping[015]                     prop=0.7188 (min 0.9372)  unif=0.000000
+    fail non-overlapping[017]                     prop=0.7500 (min 0.9372)  unif=0.000000
+    fail non-overlapping[019]                     prop=0.7812 (min 0.9372)  unif=0.000000
+    fail non-overlapping[021]                     prop=0.6875 (min 0.9372)  unif=0.000000
+    fail non-overlapping[023]                     prop=0.9062 (min 0.9372)  unif=0.000954
+    fail non-overlapping[025]                     prop=0.8125 (min 0.9372)  unif=0.000000
+    fail non-overlapping[027]                     prop=0.9688 (min 0.9372)  unif=0.000004
+    fail non-overlapping[031]                     prop=0.7500 (min 0.9372)  unif=0.000000
+    fail non-overlapping[035]                     prop=0.8125 (min 0.9372)  unif=0.000000
+    fail non-overlapping[037]                     prop=0.8125 (min 0.9372)  unif=0.000000
+    fail non-overlapping[039]                     prop=0.9062 (min 0.9372)  unif=0.000049
+    fail non-overlapping[041]                     prop=0.7812 (min 0.9372)  unif=0.000000
+    fail non-overlapping[043]                     prop=0.8125 (min 0.9372)  unif=0.000000
+    fail non-overlapping[045]                     prop=0.9062 (min 0.9372)  unif=0.001212
+    fail non-overlapping[047]                     prop=0.9688 (min 0.9372)  unif=0.000081
+    fail non-overlapping[051]                     prop=0.9062 (min 0.9372)  unif=0.052778
+    fail non-overlapping[053]                     prop=0.7812 (min 0.9372)  unif=0.000000
+    fail non-overlapping[057]                     prop=0.7812 (min 0.9372)  unif=0.000000
+    fail non-overlapping[061]                     prop=0.8750 (min 0.9372)  unif=0.003113
+    fail non-overlapping[063]                     prop=0.7812 (min 0.9372)  unif=0.000000
+    fail non-overlapping[067]                     prop=0.8750 (min 0.9372)  unif=0.000000
+    fail non-overlapping[069]                     prop=0.7500 (min 0.9372)  unif=0.000013
+    fail non-overlapping[071]                     prop=0.7812 (min 0.9372)  unif=0.000001
+    fail non-overlapping[077]                     prop=0.8438 (min 0.9372)  unif=0.000000
+    fail non-overlapping[079]                     prop=0.8125 (min 0.9372)  unif=0.000000
+    fail non-overlapping[083]                     prop=0.8750 (min 0.9372)  unif=0.000008
+    fail non-overlapping[085]                     prop=0.7812 (min 0.9372)  unif=0.000000
+    fail non-overlapping[091]                     prop=0.7500 (min 0.9372)  unif=0.000104
+    fail non-overlapping[093]                     prop=0.8750 (min 0.9372)  unif=0.000588
+    fail non-overlapping[101]                     prop=0.7500 (min 0.9372)  unif=0.000000
+    fail non-overlapping[103]                     prop=0.9062 (min 0.9372)  unif=0.000588
+    fail non-overlapping[107]                     prop=0.9062 (min 0.9372)  unif=0.000000
+    fail non-overlapping[109]                     prop=0.7812 (min 0.9372)  unif=0.000104
+    fail non-overlapping[111]                     prop=0.8750 (min 0.9372)  unif=0.000461
+    fail non-overlapping[117]                     prop=0.9062 (min 0.9372)  unif=0.000134
+    fail non-overlapping[119]                     prop=0.8750 (min 0.9372)  unif=0.000954
+    fail non-overlapping[123]                     prop=0.9062 (min 0.9372)  unif=0.009706
+    fail non-overlapping[125]                     prop=0.8125 (min 0.9372)  unif=0.000000
+    fail non-overlapping[127]                     prop=0.6562 (min 0.9372)  unif=0.000000
+    fail non-overlapping[131]                     prop=0.7812 (min 0.9372)  unif=0.000001
+    fail non-overlapping[135]                     prop=0.7812 (min 0.9372)  unif=0.000001
+    fail non-overlapping[139]                     prop=0.8750 (min 0.9372)  unif=0.002465
+    fail non-overlapping[143]                     prop=0.8438 (min 0.9372)  unif=0.000001
+    fail non-overlapping[147]                     prop=0.7812 (min 0.9372)  unif=0.000000
+    fail non-overlapping[155]                     prop=0.9375 (min 0.9372)  unif=0.000049
+    fail non-overlapping[159]                     prop=0.8438 (min 0.9372)  unif=0.001212
+    fail non-overlapping[163]                     prop=0.8438 (min 0.9372)  unif=0.000001
+    fail non-overlapping[171]                     prop=0.7188 (min 0.9372)  unif=0.000000
+    fail non-overlapping[175]                     prop=0.8750 (min 0.9372)  unif=0.000361
+    fail non-overlapping[179]                     prop=0.8125 (min 0.9372)  unif=0.001538
+    fail non-overlapping[183]                     prop=0.8750 (min 0.9372)  unif=0.000000
+    fail non-overlapping[187]                     prop=0.8750 (min 0.9372)  unif=0.000000
+    fail non-overlapping[191]                     prop=0.6875 (min 0.9372)  unif=0.000000
+    fail non-overlapping[199]                     prop=0.8438 (min 0.9372)  unif=0.000000
+    fail non-overlapping[207]                     prop=0.8750 (min 0.9372)  unif=0.003923
+    fail non-overlapping[215]                     prop=0.8125 (min 0.9372)  unif=0.000000
+    fail non-overlapping[223]                     prop=0.8438 (min 0.9372)  unif=0.000000
+    fail non-overlapping[239]                     prop=0.7500 (min 0.9372)  unif=0.000000
+    fail non-overlapping[255]                     prop=0.5000 (min 0.9372)  unif=0.000000
+    fail non-overlapping[256]                     prop=0.4688 (min 0.9372)  unif=0.000000
+    fail non-overlapping[272]                     prop=0.5938 (min 0.9372)  unif=0.000000
+    fail non-overlapping[288]                     prop=0.7812 (min 0.9372)  unif=0.000000
+    fail non-overlapping[296]                     prop=0.8125 (min 0.9372)  unif=0.000000
+    fail non-overlapping[312]                     prop=0.7812 (min 0.9372)  unif=0.000006
+    fail non-overlapping[320]                     prop=0.6562 (min 0.9372)  unif=0.000000
+    fail non-overlapping[324]                     prop=0.7812 (min 0.9372)  unif=0.000000
+    fail non-overlapping[328]                     prop=0.7500 (min 0.9372)  unif=0.000000
+    fail non-overlapping[332]                     prop=0.8438 (min 0.9372)  unif=0.000023
+    fail non-overlapping[336]                     prop=0.8438 (min 0.9372)  unif=0.000000
+    fail non-overlapping[340]                     prop=0.7812 (min 0.9372)  unif=0.000000
+    fail non-overlapping[344]                     prop=0.8750 (min 0.9372)  unif=0.000000
+    fail non-overlapping[348]                     prop=0.8750 (min 0.9372)  unif=0.000000
+    fail non-overlapping[352]                     prop=0.8438 (min 0.9372)  unif=0.000220
+    fail non-overlapping[356]                     prop=0.6875 (min 0.9372)  unif=0.000001
+    fail non-overlapping[360]                     prop=0.8750 (min 0.9372)  unif=0.000023
+    fail non-overlapping[364]                     prop=0.8125 (min 0.9372)  unif=0.000000
+    fail non-overlapping[368]                     prop=0.8750 (min 0.9372)  unif=0.000049
+    fail non-overlapping[372]                     prop=0.9688 (min 0.9372)  unif=0.000001
+    fail non-overlapping[376]                     prop=0.8438 (min 0.9372)  unif=0.000000
+    fail non-overlapping[380]                     prop=0.9375 (min 0.9372)  unif=0.000002
+    fail non-overlapping[384]                     prop=0.5938 (min 0.9372)  unif=0.000000
+    fail non-overlapping[386]                     prop=0.8438 (min 0.9372)  unif=0.000000
+    fail non-overlapping[388]                     prop=0.8438 (min 0.9372)  unif=0.000000
+    fail non-overlapping[392]                     prop=0.8750 (min 0.9372)  unif=0.000000
+    fail non-overlapping[394]                     prop=0.9062 (min 0.9372)  unif=0.006196
+    fail non-overlapping[400]                     prop=0.8125 (min 0.9372)  unif=0.000000
+    fail non-overlapping[402]                     prop=0.8750 (min 0.9372)  unif=0.000104
+    fail non-overlapping[404]                     prop=0.8438 (min 0.9372)  unif=0.000003
+    fail non-overlapping[410]                     prop=0.7188 (min 0.9372)  unif=0.000000
+    fail non-overlapping[416]                     prop=0.7188 (min 0.9372)  unif=0.000000
+    fail non-overlapping[418]                     prop=0.9062 (min 0.9372)  unif=0.000049
+    fail non-overlapping[420]                     prop=0.9375 (min 0.9372)  unif=0.000001
+    fail non-overlapping[426]                     prop=0.8438 (min 0.9372)  unif=0.000171
+    fail non-overlapping[428]                     prop=0.6875 (min 0.9372)  unif=0.000000
+    fail non-overlapping[434]                     prop=0.7500 (min 0.9372)  unif=0.000000
+    fail non-overlapping[436]                     prop=0.8125 (min 0.9372)  unif=0.000063
+    fail non-overlapping[440]                     prop=0.8750 (min 0.9372)  unif=0.000749
+    fail non-overlapping[442]                     prop=0.8125 (min 0.9372)  unif=0.000000
+    fail non-overlapping[444]                     prop=0.8438 (min 0.9372)  unif=0.000134
+    fail non-overlapping[448]                     prop=0.6562 (min 0.9372)  unif=0.000000
+    fail non-overlapping[450]                     prop=0.8750 (min 0.9372)  unif=0.000220
+    fail non-overlapping[454]                     prop=0.9688 (min 0.9372)  unif=0.000017
+    fail non-overlapping[456]                     prop=0.7812 (min 0.9372)  unif=0.000000
+    fail non-overlapping[460]                     prop=0.8438 (min 0.9372)  unif=0.000000
+    fail non-overlapping[464]                     prop=0.8438 (min 0.9372)  unif=0.000000
+    fail non-overlapping[470]                     prop=0.7188 (min 0.9372)  unif=0.000000
+    fail non-overlapping[472]                     prop=0.9062 (min 0.9372)  unif=0.000013
+    fail non-overlapping[474]                     prop=0.8750 (min 0.9372)  unif=0.000000
+    fail non-overlapping[476]                     prop=0.9062 (min 0.9372)  unif=0.000000
+    fail non-overlapping[480]                     prop=0.6250 (min 0.9372)  unif=0.000000
+    fail non-overlapping[482]                     prop=0.8438 (min 0.9372)  unif=0.000134
+    fail non-overlapping[484]                     prop=0.8750 (min 0.9372)  unif=0.000000
+    fail non-overlapping[486]                     prop=0.8438 (min 0.9372)  unif=0.000000
+    fail non-overlapping[488]                     prop=0.7812 (min 0.9372)  unif=0.000001
+    fail non-overlapping[490]                     prop=0.7500 (min 0.9372)  unif=0.000000
+    fail non-overlapping[492]                     prop=0.7500 (min 0.9372)  unif=0.000000
+    fail non-overlapping[494]                     prop=0.6875 (min 0.9372)  unif=0.000000
+    fail non-overlapping[496]                     prop=0.6250 (min 0.9372)  unif=0.000000
+    fail non-overlapping[500]                     prop=0.8125 (min 0.9372)  unif=0.000003
+    fail non-overlapping[502]                     prop=0.5938 (min 0.9372)  unif=0.000000
+    fail non-overlapping[504]                     prop=0.5938 (min 0.9372)  unif=0.000000
+    fail non-overlapping[506]                     prop=0.7500 (min 0.9372)  unif=0.000000
+    fail non-overlapping[508]                     prop=0.4688 (min 0.9372)  unif=0.000000
+    fail non-overlapping[510]                     prop=0.5000 (min 0.9372)  unif=0.000000
+    fail overlapping                              prop=0.9062 (min 0.9372)  unif=0.000220
+    fail runs                                     prop=0.3125 (min 0.9372)  unif=0.000000
+    fail serial-1                                 prop=0.5625 (min 0.9372)  unif=0.000000
+r4: 188 sub-tests, 1 failed (expected 1.02 by chance), suite p=0.6406, min proportion 0.9062 -> PASS
+    fail non-overlapping[085]                     prop=0.9062 (min 0.9372)  unif=0.136304
+r5: 188 sub-tests, 2 failed (expected 0.95 by chance), suite p=0.2459, min proportion 0.8750 -> PASS
+    fail non-overlapping[027]                     prop=0.9062 (min 0.9372)  unif=0.788728
+    fail non-overlapping[504]                     prop=0.8750 (min 0.9372)  unif=0.227773
+r6: 188 sub-tests, 1 failed (expected 1.02 by chance), suite p=0.6406, min proportion 0.8889 -> PASS
+    fail random-excursions[-2]                    prop=0.8889 (min 0.9196)  unif=0.213309
+r7: 188 sub-tests, 0 failed (expected 1.29 by chance), suite p=1, min proportion 0.9375 -> PASS
+r8: 188 sub-tests, 2 failed (expected 1.06 by chance), suite p=0.2873, min proportion 0.8947 -> PASS
+    fail non-overlapping[508]                     prop=0.9062 (min 0.9372)  unif=0.663130
+    fail random-excursions[+3]                    prop=0.8947 (min 0.9215)  unif=0.275709
+r9: 188 sub-tests, 4 failed (expected 0.99 by chance), suite p=0.01813, min proportion 0.8824 -> PASS
+    fail random-excursions-variant[+2]            prop=0.8824 (min 0.9176)  unif=0.300679
+    fail random-excursions-variant[+3]            prop=0.8824 (min 0.9176)  unif=0.745791
+    fail random-excursions-variant[-9]            prop=0.8824 (min 0.9176)  unif=0.624872
+    fail random-excursions[-4]                    prop=0.8824 (min 0.9176)  unif=0.504800
+r10: 188 sub-tests, 0 failed (expected 1.39 by chance), suite p=1, min proportion 0.9375 -> PASS
+r11: 188 sub-tests, 4 failed (expected 1.19 by chance), suite p=0.03305, min proportion 0.9062 -> PASS
+    fail non-overlapping[151]                     prop=0.9062 (min 0.9372)  unif=0.414525
+    fail non-overlapping[348]                     prop=0.9062 (min 0.9372)  unif=0.192984
+    fail random-excursions-variant[-4]            prop=0.9091 (min 0.9264)  unif=0.083712
+    fail random-excursions-variant[-5]            prop=0.9091 (min 0.9264)  unif=0.721592
+r12: 188 sub-tests, 0 failed (expected 1.24 by chance), suite p=1, min proportion 0.9375 -> PASS
+
+=== 7. charts ==================================================
+charts ->
+  wrote graphs/01_avalanche_rounds.png
+  wrote graphs/02_sac_deviation.png
+  wrote graphs/03_sac_matrix.png
+  wrote graphs/04_word_diffusion.png
+  wrote graphs/05_aead_avalanche.png
+  wrote graphs/06_aead_bitwise.png
+  wrote graphs/07_sts_round_sweep.png
+  wrote graphs/08_plaintext_staircase.png
+
+done. results/ has the CSVs, graphs/ the figures.
+streams/ holds 123M of generated bitstreams;
+they are reproducible from seed 20260929 and are not version-controlled.

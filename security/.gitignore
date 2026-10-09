@@ -1,0 +1,4 @@
+# generated data, reproducible from the seed in run_all.sh
+streams/
+build/
+__pycache__/
