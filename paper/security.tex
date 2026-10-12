@@ -254,68 +254,52 @@ counts, $p^{6}$ and $p^{10}$, return suite statistics of $0.641$ and $1.000$.
 \label{sec:sec-parents}
 
 SipCon64 takes its mode, state layout and round constants from Ascon and its
-round function from SipHash. Both designs are published with a security
-analysis. This subsection records what those analyses report for the parameter
-values SipCon64 uses.
+round function from SipHash. This subsection records what the published
+analysis of each design reports for the parameter values SipCon64 uses.
 
 \subsubsection{Ascon}
 
 The Ascon design document \cite{caesar} specifies two primary AEAD instances:
-Ascon-128, with rate $r = 64$, capacity $c = 256$ and round schedule
-$p^{12}/p^{6}$; and Ascon-128a, with $r = 128$, $c = 192$ and $p^{12}/p^{8}$.
-SipCon64 uses $r = 64$ and, over its $256$-bit state, $c = 192$.
+Ascon-128, with rate $r = 64$, capacity $c = 256$ and schedule $p^{12}/p^{6}$;
+and Ascon-128a, with $r = 128$, $c = 192$ and $p^{12}/p^{8}$. SipCon64 uses
+$r = 64$ and, over its $256$-bit state, $c = 192$.
 
-For the capacity, Ascon's analysis states that once an internal state has been
-recovered, forgeries follow with complexity $2^{c/2}$, and that the robustness
-of Ascon-128a at $c = 192$ is correspondingly lower than that of Ascon-128 at
-$c = 256$; the document expects key recovery for the two variants not
-significantly below $2^{96}$ and $2^{128}$ respectively \cite{caesar}. The
-figure reported there for $c = 192$, the capacity SipCon64 uses, is $2^{96}$.
+On the capacity, the analysis states that once an internal state is recovered
+forgeries follow with complexity $2^{c/2}$, and expects key recovery for the
+two variants not significantly below $2^{96}$ ($c = 192$) and $2^{128}$
+($c = 256$) \cite{caesar}. The figure reported for $c = 192$, the capacity
+SipCon64 uses, is $2^{96}$.
 
-For the permutation, the document reports minimum active S-box counts of $1$,
-$4$ and $15$ over one, two and three rounds for differential characteristics,
-and $1$, $4$ and $13$ for linear characteristics, with heuristic search giving
-at most $44$ and $43$ over four rounds and at most $78$ and $67$ over five. The
-Ascon S-box has maximum differential probability and maximum linear bias
-$2^{-2}$, both with branch number $3$, and the best characteristics known to
-the authors with probability above $2^{-128}$ cover four rounds of the
-permutation \cite{caesar}. These quantities are defined over Ascon's own S-box
-and linear diffusion layer, which SipCon64 replaces with SIPROUND.
-
-For the construction as a whole, the document reports that the best
-cryptanalytic key recovery against Ascon reaches an initialisation reduced to
-seven of twelve rounds at a time complexity of about $2^{104}$, and describes
-this as a $42\%$ security margin \cite{caesar}.
+On the permutation, the document reports minimum active S-box counts of $1$,
+$4$ and $15$ over one to three rounds for differential characteristics and
+$1$, $4$ and $13$ for linear, with heuristic search giving at most $44$ and
+$43$ over four rounds and $78$ and $67$ over five; the S-box has maximum
+differential probability and linear bias $2^{-2}$ with branch number $3$, and
+the best characteristics reported with probability above $2^{-128}$ cover four
+rounds \cite{caesar}. These quantities are defined over Ascon's S-box and
+linear layer, which SipCon64 replaces with SIPROUND. For the full
+construction, the best key recovery reported reaches an initialisation reduced
+to seven of twelve rounds at about $2^{104}$, described there as a $42\%$
+security margin \cite{caesar}.
 
 \subsubsection{SipHash}
 
-SipHash \cite{siphash} is specified as a family SipHash-$c$-$d$, where $c$ is
-the number of compression rounds and $d$ the number of finalisation rounds over
-the same SipRound, operating on a $256$-bit state of four $64$-bit words with a
-$128$-bit key and a $64$-bit tag. SipCon64 uses the same round function and the
-same four-word state width.
+SipHash \cite{siphash} is specified as a family SipHash-$c$-$d$, with $c$
+compression and $d$ finalisation rounds over the same SipRound, on a $256$-bit
+state of four $64$-bit words with a $128$-bit key and a $64$-bit tag. SipCon64
+uses the same round function and state width. The authors state that $c \ge 2$
+and $d \ge 4$ is expected to give the maximum PRF security possible for any
+function with the same key and output size, give SipHash-2-4 as the fast
+proposal and SipHash-4-8 as a conservative one, and title their analysis
+\emph{Preliminary cryptanalysis}.
 
-The authors state that SipHash-$c$-$d$ with $c \ge 2$ and $d \ge 4$ is expected
-to provide the maximum PRF security possible for any function with the same key
-size and output size, give SipHash-2-4 as the fast proposal and SipHash-4-8 as
-a conservative one, and present their analysis in a section titled
-\emph{Preliminary cryptanalysis} \cite{siphash}.
-
-Two of its results concern the round function directly. On internal collisions,
-the analysis notes that for any MAC with a $256$-bit internal state, internal
-collisions can be used to forge valid tags with complexity of the order of
-$2^{128}$ queries. On truncated differentials, the authors apply the technique
-used against Salsa20: they inject a one-bit difference in the most significant
-bit of $v_3$ and search for bias in $v_0 \oplus v_1 \oplus v_2 \oplus v_3$
-after iterating SipRound. They report that many biases are found after three
-iterations, and that after four or more iterations no bias was detected over
-sets of $2^{30}$ samples \cite{siphash}. The round count at which they stop
-detecting bias, four, is the round count at which the avalanche average of
-Section~\ref{sec:sec-avalanche} reaches $50\%$ and the SP 800-22 sweep of
+Two of its results concern the round function. For internal collisions, the
+analysis notes that for any MAC with a $256$-bit internal state, collisions can
+be used to forge tags with complexity of the order of $2^{128}$ queries. For
+truncated differentials, the authors inject a one-bit difference in the most
+significant bit of $v_3$ and search for bias in $v_0 \oplus v_1 \oplus v_2
+\oplus v_3$ after iterating SipRound: many biases are found after three
+iterations, and after four or more none was detected over sets of $2^{30}$
+samples \cite{siphash}. Four rounds is also where the avalanche average of
+Section~\ref{sec:sec-avalanche} reaches $50\%$ and the sweep of
 Section~\ref{sec:sec-sts} begins to pass.
-
-The authors also analyse an attacker who injects a difference in the first
-message word and guesses the difference in $v_3$ every two SipRounds, obtaining
-a four-round characteristic of estimated probability $2^{-134}$, and record
-that such an attacker requires leakage of $v_3$ every two SipRounds and is
-outside the security claims stated in their Section~3 \cite{siphash}.
